@@ -32,6 +32,12 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
   <img src="docs/images/sales-margin.png" width="49%" alt="Sales &amp; Margin: revenue, discount and margin KPIs against the year before, a monthly trend and a region table">
   <img src="docs/images/bakery-franchises.png" width="49%" alt="Bakery Franchises: sales KPIs and a world map of franchises sized by revenue">
 </p>
+<p>
+  <img src="docs/images/travel-marketplace.png" width="49%" alt="Travel Marketplace: booking KPIs, a world map of destinations sized by revenue and the top destinations">
+  <img src="docs/images/guest-experience.png" width="49%" alt="Guest Experience: review and support-chat KPIs, reviews per month and the star distribution">
+  <img src="docs/images/omnichannel-retail.png" width="49%" alt="Omnichannel Retail: sales KPIs against the year before, monthly sales by channel and the channel mix">
+  <img src="docs/images/world-weather.png" width="49%" alt="World Weather: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
+</p>
 
 **1. Sign in with the Databricks CLI** (a recent version; `databricks --version`):
 
