@@ -1,0 +1,37 @@
+table customer
+	lineageTag: 6c2a0b11-0000-4000-8000-000000000003
+
+	column c_custkey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: c_custkey
+
+	column c_name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: c_name
+
+	column c_nationkey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: c_nationkey
+
+	column c_mktsegment
+		dataType: string
+		summarizeBy: none
+		sourceColumn: c_mktsegment
+
+	partition customer = m
+		mode: import
+		source =
+				let
+					Source = Databricks.Catalogs(DatabricksHost, DatabricksHttpPath, null),
+					samples_Database = Source{[Name="samples",Kind="Database"]}[Data],
+					tpch_Schema = samples_Database{[Name="tpch",Kind="Schema"]}[Data],
+					customer_Table = tpch_Schema{[Name="customer",Kind="Table"]}[Data],
+					#"Removed Columns" = Table.RemoveColumns(customer_Table, {"c_address", "c_phone", "c_comment"})
+				in
+					#"Removed Columns"
+

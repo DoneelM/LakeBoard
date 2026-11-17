@@ -1,0 +1,26 @@
+relationship 5b1c0d2a-0000-4000-8000-000000000001
+	fromColumn: orders.o_custkey
+	toColumn: customer.c_custkey
+
+relationship 5b1c0d2a-0000-4000-8000-000000000002
+	fromColumn: customer.c_nationkey
+	toColumn: nation.n_nationkey
+
+relationship 5b1c0d2a-0000-4000-8000-000000000003
+	fromColumn: nation.n_regionkey
+	toColumn: region.r_regionkey
+
+relationship 5b1c0d2a-0000-4000-8000-000000000004
+	crossFilteringBehavior: bothDirections
+	fromColumn: lineitem.l_orderkey
+	toColumn: orders.o_orderkey
+
+relationship 5b1c0d2a-0000-4000-8000-000000000005
+	fromColumn: orders.o_orderdate
+	toColumn: Date.Date
+
+relationship 5b1c0d2a-0000-4000-8000-000000000006
+	isActive: false
+	fromColumn: lineitem.l_shipdate
+	toColumn: Date.Date
+

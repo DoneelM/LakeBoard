@@ -1,0 +1,38 @@
+{
+  "title": "Daily sales",
+  "description": "Revenue and transactions per day for one country, from samples.bakehouse.sales_transactions and samples.bakehouse.sales_franchises.",
+  "source": {
+    "kind": "call",
+    "connector": "Databricks",
+    "tool": "execute_sql",
+    "args": {
+      "warehouse_id": "0000000000000000",
+      "query": "SELECT TO_DATE(t.dateTime) AS day, SUM(t.totalPrice) AS revenue, COUNT(*) AS transactions\nFROM samples.bakehouse.sales_transactions AS t\nJOIN samples.bakehouse.sales_franchises AS f ON f.franchiseID = t.franchiseID\nWHERE f.country = '{{country}}'\n  AND t.dateTime >= '{{start_date}}'\nGROUP BY TO_DATE(t.dateTime)\nORDER BY day;"
+    },
+    "rules": {
+      "country": {
+        "type": "string",
+        "enum": [
+          "USA",
+          "Japan",
+          "Australia",
+          "Sweden"
+        ]
+      },
+      "start_date": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      }
+    }
+  },
+  "langs": {
+    "query": "sql"
+  },
+  "updated": {
+    "at": "2026-11-17T06:00:00Z",
+    "by": "Scheduled task"
+  },
+  "edit": {
+    "allowed": false
+  }
+}

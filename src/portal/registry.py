@@ -28,6 +28,20 @@ GENIE_MAX_SAMPLES = 5
 GENIE_MAX_SAMPLE_LEN = 200
 GENIE_MAX_ABOUT_LEN = 600
 SOURCE_MAX_LEN = 200  # `source:` on a dataset: a short note on how its source tables are built
+PAGE_KINDS = ("lakeboard", "artifact")  # `page:`; artifact = a Claude Dashboard artifact, run as-is (decision 0011)
+STATUSES = ("live", "draft")  # `status:`; draft = only drafts_groups and the dashboard's groups see it
+# Files a `page: artifact` dashboard may keep in assets/: scripts, styles, images and fonts. Nothing else is served.
+ASSET_TYPES = {
+    ".js": "text/javascript", ".css": "text/css",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".svg": "image/svg+xml", ".avif": "image/avif", ".ico": "image/x-icon",
+    ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
+}
+ASSET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$")  # flat: no folders, no "..", no leading dot
+ASSET_MAX_BYTES = 5_000_000
+SNAPSHOT_RE = re.compile(r"^snapshots/[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.json$")
+# <script src="x"> / <link href="x"> naming a file by bare name, which a page: artifact dashboard serves from assets/
+BARE_REF_RE = re.compile(r"<(?:script|link)\b[^>]*?\s(?:src|href)\s*=\s*[\"']?(?:\./)?([A-Za-z0-9][^\"'\s>/:?#]*)[\"'\s>?#]", re.IGNORECASE)
 
 
 def parse_ttl(value: str | int | None, default: int = 3600) -> int:
@@ -88,10 +102,14 @@ class Dataset:
     warm: list[dict] = field(default_factory=list)  # parameter sets refreshed in the background
     background: bool = True  # auth: app only: keep it refreshed all day (False = load when someone opens the page)
     source: str = ""  # optional plain-text note on how the source is built, shown in the freshness panel
+    todo: bool = False  # not connected yet (e.g. imported from a Claude artifact): never queried, see snapshot
+    snapshot: str = ""  # todo only: snapshots/<id>.json, served instead in a local preview run (gitignored)
 
     @property
     def cache_kind(self) -> str:
         """How the result is cached, for the freshness panel: user, shared, warm (shared + warm list) or app."""
+        if self.todo:
+            return "todo"
         if self.auth == "app":
             return "app"
         if self.warm:
@@ -169,6 +187,14 @@ class Dashboard:
     replaces: str = ""
     errors: list[str] = field(default_factory=list)
     genie: Genie | None = None
+    page_kind: str = "lakeboard"  # `page:` lakeboard (default) or artifact
+    status: str = "live"  # `status:` live (default) or draft
+    assets: dict[str, Path] = field(default_factory=dict)  # page: artifact only; name -> file in assets/
+    warnings: list[str] = field(default_factory=list)  # reported by check.py; they don't stop the dashboard loading
+
+    @property
+    def draft(self) -> bool:
+        return self.status == "draft"
 
     def genie_space(self, env: str) -> str | None:
         """The Genie space for this environment, or None (no chat bar)."""
@@ -183,6 +209,7 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
     env = env or current_env()
     slug = folder.name
     errors: list[str] = []
+    warnings: list[str] = []
     if not SLUG_RE.match(slug):
         errors.append(f"folder name {slug!r} must be lowercase letters, digits and hyphens")
     manifest = yaml.safe_load((folder / "dashboard.yml").read_text(encoding="utf-8")) or {}
@@ -203,9 +230,24 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
         if not sql_path.is_file():
             errors.append(f"dataset {ds_id}: {spec['sql']} not found")
             continue
+        todo = spec.get("todo", False)
+        if not isinstance(todo, bool):
+            errors.append(f"dataset {ds_id}: todo must be true or false")
+            todo = False
+        snapshot = spec.get("snapshot") or ""
+        if snapshot and not todo:
+            errors.append(f"dataset {ds_id}: snapshot is only used with todo: true")
+        elif snapshot and (not isinstance(snapshot, str) or not SNAPSHOT_RE.match(snapshot)):
+            errors.append(f"dataset {ds_id}: snapshot must be snapshots/<name>.json (letters, digits, - and _)")
+            snapshot = ""
+        if todo:
+            warnings.append(f"dataset {ds_id} is todo: it is not connected to Databricks yet; write its SQL and remove "
+                            "todo: true before it can load")
         sql = sql_path.read_text(encoding="utf-8").strip().rstrip(";")
         body = strip_sql_comments_and_strings(sql)
-        if not re.match(r"\s*(WITH|SELECT)\b", body, re.IGNORECASE):
+        if todo and not body.strip():
+            pass  # a todo dataset's SQL may be a stub with comments only
+        elif not re.match(r"\s*(WITH|SELECT)\b", body, re.IGNORECASE):
             errors.append(f"dataset {ds_id}: SQL must start with SELECT or WITH")
         if ";" in body:
             errors.append(f"dataset {ds_id}: SQL must be a single statement")
@@ -243,16 +285,33 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
             params=used, cache_ttl=parse_ttl(spec.get("cache_ttl")), auth=auth, groups=list(spec.get("groups") or []),
             shared=cache == "shared" or auth == "app", warm=[w for w in warm if isinstance(w, dict)],
             background=bool(spec.get("background", True)), source=" ".join(source.split()),
+            todo=todo, snapshot=snapshot if todo else "",
         )
     page_path = folder / "index.html"
     page = page_path.read_text(encoding="utf-8") if page_path.is_file() else ""
     if not page:
         errors.append("index.html is missing")
-    for ds_id in sorted(set(re.findall(r"dash\.(?:data|refresh)\(\s*['\"]([A-Za-z0-9_-]+)['\"]", page))):
-        if ds_id not in datasets:
-            errors.append(f"index.html reads dataset {ds_id!r}, which dashboard.yml does not declare")
-    if REMOTE_SCRIPT_RE.search(page):
-        errors.append("index.html loads a script from another site; use `libs:` or ask the data team to add the library")
+    page_kind = manifest.get("page", "lakeboard")
+    if page_kind not in PAGE_KINDS:
+        errors.append(f"page must be one of {list(PAGE_KINDS)}")
+    status = manifest.get("status", "live")
+    if status not in STATUSES:
+        errors.append(f"status must be one of {list(STATUSES)}")
+    assets, asset_errors = load_assets(folder, page_kind == "artifact")
+    errors += asset_errors
+    scripts = {"index.html": page}
+    scripts.update({f"assets/{n}": p.read_text(encoding="utf-8", errors="replace") for n, p in assets.items() if n.endswith(".js")})
+    calc_ids = {c for text in scripts.values() for c in re.findall(r"dash\.calc\(\s*['\"]([A-Za-z0-9_-]+)['\"]", text)}
+    for name, text in scripts.items():
+        for ds_id in sorted(set(re.findall(r"dash\.(?:data|refresh)\(\s*['\"]([A-Za-z0-9_-]+)['\"]", text))):
+            if ds_id not in datasets and ds_id not in calc_ids:
+                errors.append(f"{name} reads dataset {ds_id!r}, which dashboard.yml does not declare")
+        if REMOTE_SCRIPT_RE.search(text):
+            errors.append(f"{name} loads a script from another site; use `libs:` or ask the data team to add the library")
+    if page_kind == "artifact":
+        for ref in sorted(set(BARE_REF_RE.findall(page))):
+            if ref not in assets:
+                errors.append(f"index.html loads {ref!r}, which is not in assets/")
     section = manifest.get("section", "Other")
     if section not in SECTIONS:
         errors.append(f"section {section!r} must be one of {SECTIONS} (new sections are added in src/environments.yml)")
@@ -271,7 +330,35 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
         owner=manifest.get("owner", ""), groups=list(manifest.get("groups") or []), order=int(manifest.get("order", 100)),
         datasets=datasets, params=params, page=page, path=folder, section=section, environments=envs, libs=libs,
         replaces=str(manifest.get("replaces", "")), errors=errors, genie=genie,
+        page_kind=page_kind if page_kind in PAGE_KINDS else "lakeboard",
+        status=status if status in STATUSES else "draft",  # an unreadable status is treated as the safer one
+        assets=assets, warnings=warnings,
     )
+
+
+def load_assets(folder: Path, allowed: bool) -> tuple[dict[str, Path], list[str]]:
+    """The files in <dashboard>/assets/: flat, known types only, no links. Only page: artifact dashboards have them."""
+    root = folder / "assets"
+    if not root.exists() and not root.is_symlink():
+        return {}, []
+    if not allowed:
+        return {}, ["assets/ is only used by page: artifact dashboards; put the page's code in index.html"]
+    if root.is_symlink() or not root.is_dir():
+        return {}, ["assets must be a plain folder"]
+    assets, errors = {}, []
+    for p in sorted(root.iterdir()):
+        name = p.name
+        if p.is_symlink() or not p.is_file():
+            errors.append(f"assets/{name}: only plain files are allowed (no folders or links)")
+        elif not ASSET_NAME_RE.match(name):
+            errors.append(f"assets/{name}: file names may use letters, digits, '-', '_' and '.' only")
+        elif p.suffix.lower() not in ASSET_TYPES:
+            errors.append(f"assets/{name}: only {', '.join(sorted(ASSET_TYPES))} files are allowed")
+        elif p.stat().st_size > ASSET_MAX_BYTES:
+            errors.append(f"assets/{name}: larger than {ASSET_MAX_BYTES // 1_000_000} MB")
+        else:
+            assets[name] = p
+    return assets, errors
 
 
 def load_all(root: Path = DASHBOARDS_DIR, env: str | None = None) -> dict[str, Dashboard]:

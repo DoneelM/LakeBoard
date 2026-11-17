@@ -11,13 +11,14 @@ from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from portal import data, genie, sources, usage, xlsx
-from portal.auth import LOCAL_PROFILE, User, can_open, current_user
-from portal.registry import Dashboard, load_all
-from portal.settings import BRAND, IMAGE_HOSTS, LIBS, LOCALE, SECTIONS, TIMEZONE, WARM, current_env, resolve_default
+from portal import data, genie, snapshots, sources, usage, xlsx
+from portal.auth import LOCAL_PROFILE, User, can_open, can_open_dashboard, current_user
+from portal.registry import ASSET_TYPES, Dashboard, load_all
+from portal.settings import (BRAND, DRAFTS_GROUPS, IMAGE_HOSTS, LIBS, LOCALE, SECTIONS, TIMEZONE, WARM, current_env,
+                             is_local_run, resolve_default)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("portal")
@@ -55,6 +56,10 @@ for d in DASHBOARDS.values():
     for err in d.errors:
         log.error("dashboard %s: %s", d.slug, err)
 LIVE = {k: v for k, v in DASHBOARDS.items() if not v.errors and ENV in v.environments}
+LOCAL_RUN = is_local_run()  # a developer's own run: drafts are shown to them (decision 0011)
+PREVIEW_SNAPSHOTS = snapshots.preview_enabled()  # local only: todo datasets serve their snapshot rows
+if PREVIEW_SNAPSHOTS:
+    log.warning("snapshot preview is on: todo datasets serve rows from their local snapshots/ file, not Databricks")
 log.info("environment %s: %d dashboards live, %d hidden or broken", ENV, len(LIVE), len(DASHBOARDS) - len(LIVE))
 
 
@@ -90,22 +95,31 @@ def board_for(request: Request, slug: str) -> tuple[Dashboard, User]:
     if not d:
         raise HTTPException(404, "Dashboard not found")
     user = current_user(request)
-    if not can_open(user, d.groups):
+    if not may_open(user, d):
         raise HTTPException(403, "You don't have access to this dashboard")
     return d, user
+
+
+def may_open(user: User, d: Dashboard) -> bool:
+    """Dashboard groups, plus drafts_groups for a `status: draft` dashboard (portal.auth.can_open_dashboard)."""
+    return can_open_dashboard(user, d, DRAFTS_GROUPS, local=LOCAL_RUN)
+
+
+DRAFT_BADGE = '<span class="pn-draft" title="Draft: not published yet; only some groups can see it">Draft</span>'
 
 
 def nav_html(user: User, active: str | None) -> str:
     """Left navigation: one block per section, listing the dashboards this user may open."""
     out = []
     for section in SECTIONS:
-        items = [d for d in LIVE.values() if d.section == section and can_open(user, d.groups)]
+        items = [d for d in LIVE.values() if d.section == section and may_open(user, d)]
         if not items:
             continue
         links = ""
         for d in items:
             current = ' aria-current="page"' if d.slug == active else ""
-            links += f'<li><a href="/d/{d.slug}"{current} title="{html.escape(d.description)}">{html.escape(d.title)}</a></li>'
+            badge = DRAFT_BADGE if d.draft else ""
+            links += f'<li><a href="/d/{d.slug}"{current} title="{html.escape(d.description)}">{html.escape(d.title)}{badge}</a></li>'
         out.append(f'<div class="pn-section"><h2>{html.escape(section)}</h2><ul>{links}</ul></div>')
     return "\n".join(out) or '<p class="pn-empty">No dashboards are shared with you yet.</p>'
 
@@ -121,9 +135,13 @@ REFRESH_HTML = (
 )
 
 
-def shell(user: User, *, title: str, active: str | None, config: dict, page: str, libs: list[str] = ()) -> str:
+def shell(user: User, *, title: str, active: str | None, config: dict, page: str, libs: list[str] = (),
+          artifact: bool = False) -> str:
     css = "".join(f'<link rel="stylesheet" href="{u}">' for lib in libs for u in LIBS[lib].get("css", []))
     js = "".join(f'<script src="{u}"></script>' for lib in libs for u in LIBS[lib].get("js", []))
+    if artifact:  # a Claude Dashboard artifact: its tokens, then the runtime that mounts and runs the page
+        css += f'<link rel="stylesheet" href="/static/artifact.css?v={VERSION}">'
+        js += f'<script src="/static/artifact.js?v={VERSION}" defer></script>'
     if config.get("genie"):  # the Ask Genie bar, only on dashboards with a Genie space in this environment
         css += f'<link rel="stylesheet" href="/static/genie.css?v={VERSION}">'
         js += f'<script src="/static/genie.js?v={VERSION}" defer></script>'
@@ -144,8 +162,8 @@ def home(request: Request):
     for section in SECTIONS:
         cards = "".join(
             f'<a class="pc-card" href="/d/{d.slug}"><span class="pc-owner">{html.escape(d.owner)}</span>'
-            f"<strong>{html.escape(d.title)}</strong><span>{html.escape(d.description)}</span></a>"
-            for d in LIVE.values() if d.section == section and can_open(user, d.groups)
+            f"<strong>{html.escape(d.title)}{DRAFT_BADGE if d.draft else ''}</strong><span>{html.escape(d.description)}</span></a>"
+            for d in LIVE.values() if d.section == section and may_open(user, d)
         )
         if cards:
             blocks.append(f'<section><h2 class="pc-h">{html.escape(section)}</h2><div class="pc-grid">{cards}</div></section>')
@@ -170,8 +188,25 @@ def dashboard_page(request: Request, slug: str):
     if d.genie_space(ENV):
         config["genie"] = {"samples": d.genie.sample_questions}
     page = d.page.replace("{{LOGO}}", html.escape(str(BRAND["logo"])))
+    if d.page_kind == "artifact":
+        # The page goes in inert, inside a <template>: nothing in it loads or runs until static/artifact.js mounts it
+        # into #dash-root, resolves its bare file names to assets/ and runs its scripts in order (decision 0011).
+        config["page"] = "artifact"
+        config["assets"] = sorted(d.assets)
+        page = f'<template id="dash-artifact">{page}</template>'
     usage.record("view", ENV, user.email, d.slug)
-    return shell(user, title=d.title, active=d.slug, config=config, page=page, libs=d.libs)
+    return shell(user, title=d.title, active=d.slug, config=config, page=page, libs=d.libs, artifact=d.page_kind == "artifact")
+
+
+@app.get("/d/{slug}/assets/{name}")
+def dashboard_asset(request: Request, slug: str, name: str):
+    """A file from a page: artifact dashboard's assets/ folder. Only names the registry accepted are served."""
+    d, _ = board_for(request, slug)
+    path = d.assets.get(name)
+    if path is None:
+        raise HTTPException(404, "File not found")
+    # no-cache = revalidate each time (ETag), so a changed file shows at once; unchanged ones aren't sent again
+    return FileResponse(path, media_type=ASSET_TYPES[path.suffix.lower()], headers={"Cache-Control": "private, no-cache"})
 
 
 @app.get("/api/d/{slug}/data/{dataset_id}")
@@ -182,6 +217,17 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
         raise HTTPException(404, "Unknown dataset")
     if not can_open(user, ds.groups):
         return JSONResponse({"error": "You don't have access to this part of the dashboard"}, status_code=403)
+    if ds.todo:
+        if not (PREVIEW_SNAPSHOTS and ds.snapshot):
+            return JSONResponse({"error": "This data isn't connected to Databricks yet (todo in dashboard.yml)"}, status_code=409,
+                                headers={"Cache-Control": "no-store"})
+        try:
+            payload = await asyncio.to_thread(snapshots.load, d, ds)
+        except (OSError, ValueError) as e:
+            return JSONResponse({"error": f"Snapshot preview: {e}"}, status_code=502, headers={"Cache-Control": "no-store"})
+        now = time.time()
+        return JSONResponse({**payload, "fetched_at": now, "expires_at": None, "cached": False, "cache": "snapshot",
+                             "snapshot": True}, headers={"Cache-Control": "private, no-store"})
     raw = {k: v for k, v in request.query_params.items() if k in ds.params}
     if ds.auth == "app":
         client, who, raw = app_client(), "app", {}
@@ -199,7 +245,7 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
 async def dataset_sources(request: Request, slug: str):
     """When each dataset's source tables last changed (Unity Catalog metadata, read as the app; no SQL is run)."""
     d, user = board_for(request, slug)
-    allowed = {k: v for k, v in d.datasets.items() if can_open(user, v.groups)}
+    allowed = {k: v for k, v in d.datasets.items() if can_open(user, v.groups) and not v.todo}
     out = await sources.for_datasets(allowed, app_client())
     return JSONResponse({"datasets": out}, headers={"Cache-Control": "private, no-store"})
 

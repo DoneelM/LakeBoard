@@ -1,0 +1,16 @@
+{
+  "title": "Reviews by franchise",
+  "description": "Saved daily from a Genie run that reads samples.bakehouse.media_customer_reviews and sales_franchises: review count per franchise.",
+  "source": {
+    "kind": "file",
+    "url": "/_blob/0123456789abcdef0123456789abcdef",
+    "name": "reviews_by_franchise.csv",
+    "format": "csv"
+  },
+  "updated": {
+    "at": "2026-11-17T06:00:00Z",
+    "by": "Scheduled task"
+  },
+  "schedule": "Every day at 06:00",
+  "staleAfterHours": 26
+}

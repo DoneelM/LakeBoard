@@ -1,0 +1,4 @@
+{
+  "schedule": "Every day at 06:00",
+  "reviews": "Run this SQL exactly as written (do not modify it, do not add LIMIT) and return all rows:\nWITH r AS (\n  SELECT franchiseID, COUNT(*) AS reviews\n  FROM samples.bakehouse.media_customer_reviews\n  GROUP BY franchiseID\n)\nSELECT f.franchiseID AS franchise_id, f.name AS franchise, f.country, r.reviews\nFROM samples.bakehouse.sales_franchises AS f\nJOIN r ON r.franchiseID = f.franchiseID\nORDER BY r.reviews DESC;\n\nThen save the result as reviews_by_franchise.csv in this dashboard."
+}

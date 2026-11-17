@@ -1,0 +1,7 @@
+role 'Region Managers'
+	modelPermission: read
+
+	tablePermission region = 'region'[r_name] IN { "EUROPE", "AMERICA" }
+
+	annotation PBI_Id = 3f0c1a2b00000000000000000000000a
+

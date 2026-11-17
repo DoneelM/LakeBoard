@@ -110,6 +110,20 @@ To hide the samples, delete their folders or set `environments: [dev]` in their 
 - **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites.
 - **Migration helpers.** A Power BI usage report (who views what) to plan the order of work, and a README template
   for recording how each dashboard reconciles with the report it replaces.
+- **Power BI projects to dashboards.** Point Claude Code at a Power BI project in git (PBIP): `scripts/pbip_summary.py`
+  lists its tables, sources, DAX measures (flagging the ones that need care), relationships, RLS and visuals, and the
+  `migrate-power-bi` skill turns that into a dashboard folder and proves the numbers match.
+- **Host Claude dashboards.** A business user builds a dashboard in Claude and shares it. The `import-claude-dashboard`
+  skill turns it into a draft here with its page unchanged (`page: artifact`), recovers or stubs the SQL behind each
+  dataset, and checks it against the user's snapshot before it goes live. Drafts are visible only to the data team
+  and the groups you choose.
+
+### Two ways in
+
+| Route | Who | How |
+|---|---|---|
+| Migrate a Power BI report | Data team | Claude Code reads the Power BI project and writes the dashboard folder directly ([docs/MIGRATION.md](docs/MIGRATION.md)) |
+| Host a dashboard built in Claude | Business users, then the data team | Share the Claude dashboard; Claude Code imports it as a draft, wires its data to Unity Catalog and reconciles it ([docs/AUTHORING.md](docs/AUTHORING.md)) |
 
 ## Why not AI/BI dashboards, Streamlit or Evidence?
 

@@ -1,0 +1,15 @@
+{
+  "title": "Country targets",
+  "description": "Monthly revenue targets per country, kept by Finance in Snowflake.",
+  "source": {
+    "kind": "call",
+    "connector": "Snowflake",
+    "tool": "run_query",
+    "args": {
+      "query": "SELECT country, month, target FROM FINANCE.PLANNING.TARGETS"
+    }
+  },
+  "langs": {
+    "query": "sql"
+  }
+}
