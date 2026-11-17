@@ -41,6 +41,14 @@ From the report's `.Report` and `.SemanticModel` folders (Power BI Project forma
 
 ## 4. Build it
 
+With Claude Code, open the repository and ask it to migrate the report, giving the path to the `.pbip` file or
+the report's folder. It follows the `migrate-power-bi` skill (`.claude/skills/migrate-power-bi/SKILL.md`), which
+covers steps 3 to 5. Other tools can follow the same file.
+
+To see the whole report at once, run `python scripts/pbip_summary.py <path to .pbip or folder>` (`--json` for
+JSON). It only reads the files. It lists sources, measures, relationships, security roles, pages, visuals and
+slicers, and marks DAX that needs care: time intelligence, filter context and measures that don't add up.
+
 Follow [AUTHORING.md](AUTHORING.md). Scaffold with `scripts/new_dashboard.py`, which also writes a `README.md`
 with a table for mapping Power BI pages to the new page. Rewrite each measure as SQL at the grain the page needs.
 Keep the page names and filter order people know, and fix what is broken rather than copying it. Set `replaces:`

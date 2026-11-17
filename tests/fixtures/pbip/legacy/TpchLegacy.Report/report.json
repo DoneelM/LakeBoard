@@ -1,0 +1,88 @@
+{
+  "config": "{\"version\": \"5.59\", \"activeSectionIndex\": 0}",
+  "filters": "[]",
+  "layoutOptimization": 0,
+  "resourcePackages": [],
+  "sections": [
+    {
+      "name": "ReportSection1",
+      "displayName": "Summary",
+      "ordinal": 0,
+      "displayOption": 1,
+      "width": 1280,
+      "height": 720,
+      "config": "{}",
+      "filters": "[{\"name\": \"Filter1\", \"expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Entity\": \"orders\"}}, \"Property\": \"Order Year\"}}, \"type\": \"Advanced\", \"filter\": {\"Version\": 2, \"From\": [{\"Name\": \"o\", \"Entity\": \"orders\", \"Type\": 0}], \"Where\": [{\"Condition\": {\"Comparison\": {\"ComparisonKind\": 2, \"Left\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"Order Year\"}}, \"Right\": {\"Literal\": {\"Value\": \"1995L\"}}}}}]}}]",
+      "visualContainers": [
+        {
+          "x": 20,
+          "y": 200,
+          "z": 0,
+          "width": 300,
+          "height": 200,
+          "config": "{\"name\": \"legacyLine\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0}}], \"singleVisual\": {\"visualType\": \"lineChart\", \"projections\": {\"Category\": [{\"queryRef\": \"orders.Order Year\"}], \"Y\": [{\"queryRef\": \"orders.Revenue YTD\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"o\", \"Entity\": \"orders\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"Order Year\"}, \"Name\": \"orders.Order Year\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"Revenue YTD\"}, \"Name\": \"orders.Revenue YTD\"}]}, \"vcObjects\": {\"title\": [{\"properties\": {\"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Revenue year to date'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 20,
+          "y": 20,
+          "z": 0,
+          "width": 300,
+          "height": 200,
+          "config": "{\"name\": \"legacyCard\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0}}], \"singleVisual\": {\"visualType\": \"card\", \"projections\": {\"Values\": [{\"queryRef\": \"orders.Revenue\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"o\", \"Entity\": \"orders\", \"Type\": 0}], \"Select\": [{\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"Revenue\"}, \"Name\": \"orders.Revenue\"}]}, \"vcObjects\": {\"title\": [{\"properties\": {\"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Revenue'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 400,
+          "y": 20,
+          "z": 0,
+          "width": 300,
+          "height": 200,
+          "config": "{\"name\": \"legacySlicer\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0}}], \"singleVisual\": {\"visualType\": \"slicer\", \"projections\": {\"Values\": [{\"queryRef\": \"customer.C_MKTSEGMENT\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"c\", \"Entity\": \"customer\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"c\"}}, \"Property\": \"C_MKTSEGMENT\"}, \"Name\": \"customer.C_MKTSEGMENT\"}]}, \"vcObjects\": {\"title\": [{\"properties\": {\"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Segment'\"}}}}}]}, \"objects\": {\"general\": [{\"properties\": {\"filter\": {\"filter\": {\"Version\": 2, \"From\": [{\"Name\": \"c\", \"Entity\": \"customer\", \"Type\": 0}], \"Where\": [{\"Condition\": {\"In\": {\"Expressions\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"c\"}}, \"Property\": \"C_MKTSEGMENT\"}}], \"Values\": [[{\"Literal\": {\"Value\": \"'BUILDING'\"}}], [{\"Literal\": {\"Value\": \"'MACHINERY'\"}}]]}}}]}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "ReportSection2",
+      "displayName": "Segments",
+      "ordinal": 1,
+      "displayOption": 1,
+      "width": 1280,
+      "height": 720,
+      "config": "{}",
+      "filters": "[]",
+      "visualContainers": [
+        {
+          "x": 20,
+          "y": 20,
+          "z": 0,
+          "width": 300,
+          "height": 200,
+          "config": "{\"name\": \"legacyBars\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0}}], \"singleVisual\": {\"visualType\": \"clusteredBarChart\", \"projections\": {\"Category\": [{\"queryRef\": \"customer.C_MKTSEGMENT\"}], \"Y\": [{\"queryRef\": \"orders.Avg Order Value\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"c\", \"Entity\": \"customer\", \"Type\": 0}, {\"Name\": \"o\", \"Entity\": \"orders\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"c\"}}, \"Property\": \"C_MKTSEGMENT\"}, \"Name\": \"customer.C_MKTSEGMENT\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"Avg Order Value\"}, \"Name\": \"orders.Avg Order Value\"}]}, \"vcObjects\": {\"title\": [{\"properties\": {\"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Average order by segment'\"}}}}}]}}}",
+          "filters": "[]"
+        },
+        {
+          "x": 400,
+          "y": 20,
+          "z": 0,
+          "width": 300,
+          "height": 200,
+          "config": "{\"name\": \"legacyTable\", \"layouts\": [{\"id\": 0, \"position\": {\"x\": 0, \"y\": 0}}], \"singleVisual\": {\"visualType\": \"tableEx\", \"projections\": {\"Values\": [{\"queryRef\": \"customer.C_NAME\"}, {\"queryRef\": \"orders.Revenue\"}, {\"queryRef\": \"Max(orders.o_totalprice)\"}]}, \"prototypeQuery\": {\"Version\": 2, \"From\": [{\"Name\": \"c\", \"Entity\": \"customer\", \"Type\": 0}, {\"Name\": \"o\", \"Entity\": \"orders\", \"Type\": 0}], \"Select\": [{\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"c\"}}, \"Property\": \"C_NAME\"}, \"Name\": \"customer.C_NAME\"}, {\"Measure\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"Revenue\"}, \"Name\": \"orders.Revenue\"}, {\"Aggregation\": {\"Expression\": {\"Column\": {\"Expression\": {\"SourceRef\": {\"Source\": \"o\"}}, \"Property\": \"o_totalprice\"}}, \"Function\": 4}, \"Name\": \"Max(orders.o_totalprice)\"}]}, \"vcObjects\": {\"title\": [{\"properties\": {\"text\": {\"expr\": {\"Literal\": {\"Value\": \"'Customers'\"}}}}}]}}}",
+          "filters": "[]"
+        }
+      ]
+    },
+    {
+      "name": "ReportSection3",
+      "displayName": "Tooltip page",
+      "ordinal": 2,
+      "displayOption": 1,
+      "width": 320,
+      "height": 240,
+      "config": "{\"visibility\": 1}",
+      "filters": "[]",
+      "visualContainers": []
+    }
+  ]
+}

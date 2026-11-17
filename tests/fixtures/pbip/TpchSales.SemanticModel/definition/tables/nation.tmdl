@@ -1,0 +1,28 @@
+table nation
+	lineageTag: 6c2a0b11-0000-4000-8000-000000000004
+
+	column n_nationkey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: n_nationkey
+
+	column n_name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: n_name
+
+	column n_regionkey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: n_regionkey
+
+	partition nation = m
+		mode: import
+		source =
+				let
+					Source = Value.NativeQuery(Databricks.Catalogs(DatabricksHost, DatabricksHttpPath, null){[Name="samples",Kind="Database"]}[Data], "SELECT n_nationkey, n_name, n_regionkey FROM samples.tpch.nation", null, [EnableFolding=true])
+				in
+					Source
+

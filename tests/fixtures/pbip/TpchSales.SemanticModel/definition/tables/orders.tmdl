@@ -1,0 +1,91 @@
+/// One row per order. SYNTHETIC fixture over samples.tpch.orders.
+table orders
+	lineageTag: 6c2a0b11-0000-4000-8000-000000000001
+
+	/// Gross order value, as stored in TPC-H.
+	measure Revenue = SUM(orders[o_totalprice])
+		formatString: #,##0.00
+		displayFolder: Sales
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000101
+
+	measure 'Revenue LY' =
+			// same dates a year earlier
+			CALCULATE(
+				[Revenue],
+				SAMEPERIODLASTYEAR('Date'[Date])
+			)
+		formatString: #,##0.00
+		displayFolder: Sales
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000102
+
+	measure 'Revenue YoY %' = DIVIDE([Revenue] - [Revenue LY], [Revenue LY])
+		formatString: 0.0%
+		displayFolder: Sales
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000103
+
+	measure 'Order Count' = DISTINCTCOUNT(orders[o_orderkey])
+		formatString: #,##0
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000104
+
+	column o_orderkey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000201
+		summarizeBy: none
+		sourceColumn: o_orderkey
+
+	column o_custkey
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000202
+		summarizeBy: none
+		sourceColumn: o_custkey
+
+	column o_orderstatus
+		dataType: string
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000203
+		summarizeBy: none
+		sourceColumn: o_orderstatus
+
+	column o_totalprice
+		dataType: decimal
+		isHidden
+		formatString: #,##0.00
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000204
+		summarizeBy: sum
+		sourceColumn: o_totalprice
+
+	column o_orderdate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000205
+		summarizeBy: none
+		sourceColumn: o_orderdate
+
+	column o_orderpriority
+		dataType: string
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000206
+		summarizeBy: none
+		sourceColumn: o_orderpriority
+
+	column 'Is Urgent' = orders[o_orderpriority] IN { "1-URGENT", "2-HIGH" }
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000207
+		summarizeBy: none
+
+	partition orders = m
+		mode: import
+		source =
+				let
+					Source = Databricks.Catalogs(DatabricksHost, DatabricksHttpPath, [Catalog=null, Database=null, EnableAutomaticProxyDiscovery=null]),
+					samples_Database = Source{[Name="samples",Kind="Database"]}[Data],
+					tpch_Schema = samples_Database{[Name="tpch",Kind="Schema"]}[Data],
+					orders_Table = tpch_Schema{[Name="orders",Kind="Table"]}[Data]
+				in
+					orders_Table
+
+	annotation PBI_ResultType = Table
+
