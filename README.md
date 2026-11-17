@@ -50,6 +50,19 @@ databricks bundle run portal -t dev -p <cli-profile>
 The second command prints the app URL. Stop the app when you are done (`databricks apps stop lakeboard-dev
 -p <cli-profile>`) so it doesn't use compute.
 
+**Keep your workspace out of git** (optional, handy for a public fork): leave the placeholders and put your values in
+two gitignored files instead. `databricks.local.yml` overrides the target:
+
+```yaml
+targets:
+  dev:
+    workspace: {host: https://<your-workspace-host>}
+    variables: {warehouse_id: "<warehouse-id>", viewers_group: users}
+```
+
+and `src/environments.local.yml` sets the host the app uses to know it is dev:
+`environments: {dev: {host: <your-workspace-host>}}` (no https://).
+
 **4. Add your own dashboard:**
 
 ```bash

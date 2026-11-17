@@ -8,7 +8,19 @@ from pathlib import Path
 
 import yaml
 
-_CFG = yaml.safe_load((Path(__file__).resolve().parent.parent / "environments.yml").read_text(encoding="utf-8"))
+def with_local_hosts(cfg: dict, local: Path) -> dict:
+    """Applies the hosts in environments.local.yml (gitignored), so a fork's workspace hosts stay out of git."""
+    if local.exists():
+        for name, spec in ((yaml.safe_load(local.read_text(encoding="utf-8")) or {}).get("environments") or {}).items():
+            if name not in cfg["environments"]:
+                raise ValueError(f"{local.name}: environment {name!r} is not one of {sorted(cfg['environments'])}")
+            cfg["environments"][name]["host"] = str(spec["host"]).strip().lower()
+    return cfg
+
+
+_SRC = Path(__file__).resolve().parent.parent
+_CFG = with_local_hosts(yaml.safe_load((_SRC / "environments.yml").read_text(encoding="utf-8")),
+                        _SRC / "environments.local.yml")
 ENVIRONMENTS: dict[str, dict] = _CFG["environments"]
 CATALOGS: dict[str, dict] = _CFG["catalogs"]
 SECTIONS: list[str] = _CFG["sections"]

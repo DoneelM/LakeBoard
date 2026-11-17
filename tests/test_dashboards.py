@@ -584,3 +584,16 @@ def test_shell_shows_the_configured_brand(monkeypatch):
     assert "<title>Dashboards · Acme &lt;Insights&gt;</title>" in page
     assert 'src="/static/brand/acme.svg"' in page and "[[" not in page
     assert '"tz": "' in page and '"locale": "' in page
+
+
+def test_local_hosts_override_the_committed_ones(tmp_path):
+    from portal import settings
+    cfg = {"environments": {"dev": {"host": "adb-0.0.azuredatabricks.net"}, "prod": {"host": "adb-2.2.azuredatabricks.net"}}}
+    missing = tmp_path / "environments.local.yml"
+    assert settings.with_local_hosts(cfg, missing)["environments"]["dev"]["host"] == "adb-0.0.azuredatabricks.net"
+    missing.write_text("environments:\n  dev: {host: DBC-1.cloud.databricks.com}\n")
+    out = settings.with_local_hosts(cfg, missing)["environments"]
+    assert out == {"dev": {"host": "dbc-1.cloud.databricks.com"}, "prod": {"host": "adb-2.2.azuredatabricks.net"}}
+    missing.write_text("environments:\n  staging: {host: x}\n")
+    with pytest.raises(ValueError, match="staging"):
+        settings.with_local_hosts(cfg, missing)
