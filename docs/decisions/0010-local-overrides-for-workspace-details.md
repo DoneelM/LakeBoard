@@ -1,0 +1,44 @@
+# 0010. Workspace details in gitignored local files
+
+- **Status:** Accepted
+- **Date:** 2026-11-17
+- **Links:** pull request "Local overrides for workspace details"
+
+## Context
+To deploy, `databricks.yml` and `src/environments.yml` need real workspace hosts and a warehouse id. In a public
+repository, or a fork shared with others, people don't want those in git. `workspace.host` can't come from a bundle
+variable, and the CLI refuses to deploy when the profile's host and the bundle's host differ, so `--var` alone isn't
+enough.
+
+## Decision
+Two optional, gitignored files (`*.local.yml` in `.gitignore`):
+- `databricks.local.yml` at the repository root, picked up by `include: ["*.local.yml"]` in `databricks.yml`. It
+  overrides targets, for example the dev `workspace.host`, `warehouse_id` and `viewers_group`.
+- `src/environments.local.yml`, read by `portal/settings.py` (`with_local_hosts`). It sets the `host` of known
+  environments only; an unknown environment name stops the app with an error. It is uploaded with the app through
+  `sync.include`, like `src/sources_map.json`.
+
+Without the files, nothing changes.
+
+## Why
+- Hosts and ids stay out of git without editing committed files that are then easy to commit by accident.
+- The bundle's own `include` merge does the work for `databricks.yml`; the app needs a few lines because
+  `environments.yml` is read by the app, not the bundle.
+
+## Limitations
+- CI doesn't see the files. Pipelines keep using committed values or their own variables (`DATABRICKS_HOST`).
+- `bundle validate` warns that `src/environments.local.yml` matches no files when it isn't there (as it does for
+  `src/sources_map.json`).
+- Only hosts can be overridden in `environments.local.yml`, not catalogs, sections or brand.
+
+## Alternatives considered
+- Uncommitted edits to the committed files (`git update-index --skip-worktree`): hidden state, and easy to commit.
+- A literal `include: [databricks.local.yml]`: the bundle fails when the file is missing.
+- Setting `PORTAL_ENV` per target: `app.yaml` is shared by every target, so it can't differ per environment.
+
+## Changing it later
+Remove the `*.local.yml` include and the `sync.include` line in `databricks.yml`, and `with_local_hosts` in
+`src/portal/settings.py`.
+
+## Links
+README "Keep your workspace out of git"; `databricks.yml`; `src/portal/settings.py`.

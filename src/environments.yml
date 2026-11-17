@@ -4,6 +4,8 @@
 # Replace these placeholder hosts with your own (no https://, no trailing slash). Azure hosts look like
 # adb-<id>.<n>.azuredatabricks.net; AWS (<name>.cloud.databricks.com) and GCP (<id>.<n>.gcp.databricks.com)
 # hosts work the same way. If every environment shares one workspace, set PORTAL_ENV in each app instead.
+# To keep your hosts out of git, leave these and set them in src/environments.local.yml (gitignored), e.g.
+#   environments: {dev: {host: dbc-1234abcd-5678.cloud.databricks.com}}
 environments:
   dev:  {host: adb-0000000000000000.0.azuredatabricks.net}   # replace with your dev workspace host
   test: {host: adb-1111111111111111.1.azuredatabricks.net}   # replace with your test workspace host

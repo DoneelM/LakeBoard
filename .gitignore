@@ -6,3 +6,4 @@ __pycache__/
 .env
 usage/
 src/sources_map.json
+*.local.yml
