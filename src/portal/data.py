@@ -77,6 +77,8 @@ def cache_key(dashboard: Dashboard, ds: Dataset, who: str, params: list[Statemen
 
 
 def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, raw_params: dict, refresh: bool = False) -> dict:
+    if ds.todo:  # not connected yet (decision 0011); app.py serves a local snapshot preview instead, never this
+        raise QueryError(f"{ds.id} isn't connected to Databricks yet (todo in dashboard.yml)")
     params = bind(dashboard, ds, raw_params)
     key = cache_key(dashboard, ds, who, params)
     hit = _cache.get(key)
@@ -126,7 +128,7 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
         for d in dashboards.values():
             for ds in d.datasets.values():
                 key = f"{d.slug}/{ds.id}"
-                if ds.auth != "app" or not ds.background or next_run.get(key, 0) > time.time():
+                if ds.todo or ds.auth != "app" or not ds.background or next_run.get(key, 0) > time.time():
                     continue
                 next_run[key] = time.time() + max(ds.cache_ttl - 300, 300)
                 try:
@@ -139,7 +141,7 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
             started, last_slot = True, slot
             for d in dashboards.values():
                 for ds in d.datasets.values():
-                    for entry in ds.warm:
+                    for entry in [] if ds.todo else ds.warm:
                         try:
                             await asyncio.to_thread(fetch, d, ds, app_client_factory(), "shared", entry, True)
                         except Exception as e:

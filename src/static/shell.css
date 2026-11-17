@@ -42,3 +42,7 @@ body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: 15p
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
 .dash-skeleton { background: linear-gradient(90deg, var(--color-border-line), transparent, var(--color-border-line)); background-size: 200% 100%; min-height: 1em; }
 
+/* "Draft" beside a dashboard that isn't published yet (status: draft in dashboard.yml) */
+.pn-draft { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 10px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; vertical-align: 1px; background: var(--signal-warn); color: var(--env-badge-fg); }
+.pc-card strong span.pn-draft { vertical-align: 3px; font-size: 10px; color: var(--env-badge-fg); }

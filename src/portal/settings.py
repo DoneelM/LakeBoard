@@ -24,6 +24,8 @@ _CFG = with_local_hosts(yaml.safe_load((_SRC / "environments.yml").read_text(enc
 ENVIRONMENTS: dict[str, dict] = _CFG["environments"]
 CATALOGS: dict[str, dict] = _CFG["catalogs"]
 SECTIONS: list[str] = _CFG["sections"]
+# Who may open a dashboard marked `status: draft`, besides the dashboard's own `groups`.
+DRAFTS_GROUPS: list[str] = [str(g) for g in (_CFG["drafts_groups"] if "drafts_groups" in _CFG else ["lakeboard-admins"]) or []]
 # Catalogs whose data never changes (the freshness label gives their tables no time). Holds each name and, for an
 # allowed catalog, its dev and test names too, because /sources sees the SQL after the catalog swap.
 STATIC_CATALOGS: frozenset[str] = frozenset(
@@ -55,6 +57,18 @@ def resolve_default(value):
     today = now_local().date()
     monday = today - dt.timedelta(days=today.weekday())
     return str({"@today": today, "@week_start": monday, "@week_end": monday + dt.timedelta(days=4)}[value])
+
+
+def is_deployed(environ=None) -> bool:
+    """True inside Databricks Apps, which sets these variables for every app. Local runs don't have them."""
+    environ = os.environ if environ is None else environ
+    return any(environ.get(k) for k in ("DATABRICKS_APP_NAME", "DATABRICKS_APP_URL", "DATABRICKS_APP_PORT"))
+
+
+def is_local_run(environ=None) -> bool:
+    """A developer's own run (scripts/run_local.*): a CLI profile stands in for the user token, and not deployed."""
+    environ = os.environ if environ is None else environ
+    return bool(environ.get("PORTAL_LOCAL_PROFILE")) and not is_deployed(environ)
 
 
 def current_env() -> str:

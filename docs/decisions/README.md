@@ -56,3 +56,4 @@ this repository.
 | [0006](0006-ask-genie-as-the-viewer.md) | Ask Genie: as the viewer, one Genie space per dashboard | Accepted |
 | [0009](0009-data-freshness-label.md) | Data freshness label | Accepted |
 | [0010](0010-local-overrides-for-workspace-details.md) | Workspace details in gitignored local files | Accepted |
+| [0011](0011-claude-dashboard-artifacts.md) | Claude Dashboard artifacts run as-is | Accepted |
