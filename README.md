@@ -10,7 +10,7 @@ click through. Queries run as the person viewing the page, so Unity Catalog perm
 masks apply as they are. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that
 answers questions with the viewer's own access.
 
-![City Trips, one of the sample dashboards: KPI tiles, trips per day, a day-by-hour heatmap and the busiest ZIP codes](docs/images/city-trips.png)
+![City Trips in the running app's dark theme: KPI tiles, trips per day and a day-by-hour heatmap](docs/images/city-trips.jpg)
 
 ## Quickstart (about 10 minutes)
 
@@ -29,14 +29,14 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
 | [World Weather](src/dashboards/world-weather/) | `samples.accuweather` | Observed weather and a 15-day forecast for 50 cities, on a temperature map |
 
 <p>
-  <img src="docs/images/sales-margin.png" width="49%" alt="Sales &amp; Margin: revenue, discount and margin KPIs against the year before, a monthly trend and a region table">
-  <img src="docs/images/bakery-franchises.png" width="49%" alt="Bakery Franchises: sales KPIs and a world map of franchises sized by revenue">
+  <img src="docs/images/sales-margin.jpg" width="49%" alt="Sales &amp; Margin in dark mode: revenue, discount and margin KPIs against the year before, and a monthly trend">
+  <img src="docs/images/bakery-franchises.jpg" width="49%" alt="Bakery Franchises in dark mode: sales KPIs and a world map of franchises sized by revenue">
 </p>
 <p>
-  <img src="docs/images/travel-marketplace.png" width="49%" alt="Travel Marketplace: booking KPIs, a world map of destinations sized by revenue and the top destinations">
-  <img src="docs/images/guest-experience.png" width="49%" alt="Guest Experience: review and support-chat KPIs, reviews per month and the star distribution">
-  <img src="docs/images/omnichannel-retail.png" width="49%" alt="Omnichannel Retail: sales KPIs against the year before, monthly sales by channel and the channel mix">
-  <img src="docs/images/world-weather.png" width="49%" alt="World Weather: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
+  <img src="docs/images/travel-marketplace.jpg" width="49%" alt="Travel Marketplace in dark mode: booking KPIs, a world map of destinations sized by revenue and the top destinations">
+  <img src="docs/images/guest-experience.jpg" width="49%" alt="Guest Experience in dark mode: review and support-chat KPIs, reviews per month and the star distribution">
+  <img src="docs/images/omnichannel-retail.jpg" width="49%" alt="Omnichannel Retail in dark mode: sales KPIs against the year before, monthly sales by channel and the channel mix">
+  <img src="docs/images/world-weather.jpg" width="49%" alt="World Weather in dark mode: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
 </p>
 
 **1. Sign in with the Databricks CLI** (a recent version; `databricks --version`):
@@ -110,6 +110,25 @@ To hide the samples, delete their folders or set `environments: [dev]` in their 
 - **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites.
 - **Migration helpers.** A Power BI usage report (who views what) to plan the order of work, and a README template
   for recording how each dashboard reconciles with the report it replaces.
+
+## Data freshness
+
+Click **Data as of …** beside **Refresh data** to see when each dataset was fetched, when its cached copy
+expires, how it is shared, and what is known about its source tables. In this example, the built-in sample data
+never changes, so the panel explains why refreshing would return the same data.
+
+<img src="docs/images/refresh-details.jpg" width="510" alt="City Trips freshness details: fetch time, cache expiry, sharing mode and the expanded samples.nyctaxi.trips source table, beside the Refresh data button">
+
+## Phone layout
+
+The same City Trips dashboard at a 390 × 844 browser viewport: the navigation collapses into a drawer,
+KPI tiles wrap into two columns, and charts stack below the filters.
+
+<img src="docs/images/city-trips-mobile.jpg" width="320" alt="City Trips at phone width with collapsed navigation, date filters, two-column KPI tiles and a full-width trips-per-day chart">
+
+This is a phone-width browser preview. Databricks also documents access to Databricks Apps through the
+[Genie mobile app](https://docs.databricks.com/aws/en/genie-one/mobile); testing LakeBoard inside that native
+app is separate from the responsive layout shown here.
 
 ## Why not AI/BI dashboards, Streamlit or Evidence?
 
