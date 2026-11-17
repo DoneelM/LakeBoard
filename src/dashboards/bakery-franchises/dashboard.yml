@@ -1,0 +1,53 @@
+title: Bakery Franchises
+description: Sales, products, payment methods and customer reviews for a sample bakery franchise network, on a map and in a league table.
+owner: Samples
+section: Samples
+order: 10
+groups: []            # everyone who can open the portal; this is public sample data
+libs: [leaflet]       # the franchise map
+params:
+  country:      {type: STRING}   # optional; blank = every country
+  franchise_id: {type: BIGINT}   # the franchise picked on the map or in the table; only the reviews use it
+# Every dataset is cache: shared. samples.bakehouse is Databricks sample data that every user can read and it has
+# no row-level security, so one cached result per filter value can safely be reused for all viewers.
+# The sample never changes, so the TTLs are long; Refresh data still re-runs a query on demand.
+datasets:
+  countries:
+    title: Countries
+    description: Countries with at least one franchise, for the Country filter.
+    sql: sql/countries.sql
+    cache: shared
+    cache_ttl: 24h
+  franchises:
+    title: Franchise sales
+    description: One row per franchise with its location, size, revenue, transactions, units and customer count.
+    sql: sql/franchises.sql
+    cache: shared
+    cache_ttl: 6h
+    source: "Databricks sample data (samples.bakehouse), a fixed snapshot of 1 to 17 May 2024."
+  daily:
+    title: Daily sales
+    description: Revenue, transactions and units per day.
+    sql: sql/daily.sql
+    cache: shared
+    cache_ttl: 6h
+    source: "Databricks sample data (samples.bakehouse), a fixed snapshot of 1 to 17 May 2024."
+  products:
+    title: Sales by product
+    description: Revenue, units and transactions per product.
+    sql: sql/products.sql
+    cache: shared
+    cache_ttl: 6h
+  payments:
+    title: Payment methods
+    description: Transactions and revenue per card brand. Card numbers are never read.
+    sql: sql/payments.sql
+    cache: shared
+    cache_ttl: 6h
+  reviews:
+    title: Customer reviews
+    description: Review text for the selected franchise, newest first. Loaded only when a franchise is picked.
+    sql: sql/reviews.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample data (samples.bakehouse.media_customer_reviews), reviews from 20 to 31 May 2024."

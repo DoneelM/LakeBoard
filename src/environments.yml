@@ -1,0 +1,60 @@
+# Which environment the app is running in, and which Unity Catalog catalogs dashboards may read.
+# The environment is picked from the workspace host (or the PORTAL_ENV variable when set). A host that matches
+# none of these counts as prod.
+# Replace these placeholder hosts with your own (no https://, no trailing slash). Azure hosts look like
+# adb-<id>.<n>.azuredatabricks.net; AWS (<name>.cloud.databricks.com) and GCP (<id>.<n>.gcp.databricks.com)
+# hosts work the same way. If every environment shares one workspace, set PORTAL_ENV in each app instead.
+environments:
+  dev:  {host: adb-0000000000000000.0.azuredatabricks.net}   # replace with your dev workspace host
+  test: {host: adb-1111111111111111.1.azuredatabricks.net}   # replace with your test workspace host
+  prod: {host: adb-2222222222222222.2.azuredatabricks.net}   # replace with your prod workspace host
+
+# Dashboards may only read these catalogs. SQL is always written against the prod name, so it can be pasted
+# into the SQL editor as-is; the portal swaps the catalog when it runs in dev or test.
+# `samples` is the built-in Databricks sample catalog. It has the same name everywhere, so nothing is swapped.
+catalogs:
+  samples: {}
+  # Example of a swap: prod SQL reads main_prod.sales.orders; dev reads main_dev, test reads main_test.
+  # main_prod: {dev: main_dev, test: main_test}
+
+# Catalogs whose data never changes, or whose table `updated_at` means nothing (`samples` reports the moment you ask).
+# The freshness label shows no source time for their tables and never says "newer data available" because of them.
+static_catalogs: [samples]
+
+# Sections of the left navigation, in display order. A dashboard picks one with `section:` in dashboard.yml.
+sections: [Samples, Finance, Operations, Other]
+
+# The name and logo in the left navigation and the browser tab. `logo` is a path under /static (put your file in
+# src/static/brand) or an https URL on one of the image_hosts below. Pages can show it with {{LOGO}}.
+brand:
+  name: LakeBoard
+  logo: /static/brand/logo.svg
+
+# How kit.fmt and the freshness label write numbers and dates. Any BCP 47 locale, e.g. en-GB, de-DE.
+locale: en-US
+
+# Extra browser libraries a dashboard can ask for with `libs:` in dashboard.yml. Files live in src/static/vendor.
+libs:
+  leaflet:
+    css: [/static/vendor/leaflet/leaflet.css]
+    js: [/static/vendor/leaflet/leaflet.js]
+
+# Sites the browser may load map tiles and images from (Content-Security-Policy img-src). Pages can't call any
+# other site.
+image_hosts:
+  - https://tile.openstreetmap.org
+
+# When shared datasets with a `warm:` list are refreshed in the background, so the first viewer doesn't wait.
+# Weekdays only. Runs in prod; dev and test are usually stopped.
+# `timezone` can be any IANA zone (Europe/London, America/New_York, Australia/Sydney, ...). It is also the zone
+# for @today / @week_start / @week_end and for the times in the freshness label.
+warm:
+  timezone: UTC
+  times: ["07:00", "13:00"]
+  environments: [prod]
+
+# Where page views are recorded, per environment. Environments not listed here only write to the app log.
+# Create the table first (docs/OPERATIONS.md) and grant the app MODIFY on it (scripts/grant_app_access.py). Example:
+# usage_table:
+#   prod: main_prod.governance.lakeboard_usage
+usage_table: {}

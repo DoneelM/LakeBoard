@@ -1,0 +1,252 @@
+<style>
+.bf-row { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.bf-row > * { min-width: 0; }
+.bf-map { height: 420px; min-height: 0; }
+.bf-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+.bf-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.bf-filters > div { flex: 1 1 auto; }
+.bf-reviews-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.bf-reviews-head h2 { margin: 0; font-size: 14px; font-weight: 700; flex: 1; }
+.bf-reviews { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 420px; overflow-y: auto; }
+.bf-reviews li { border-top: 1px solid var(--color-border-line); padding-top: 8px; }
+.bf-reviews h3 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+.bf-reviews p { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-line; }
+.bf-reviews time { display: block; margin-bottom: 2px; font-size: 12px; color: var(--color-fg-muted); }
+.bf-hint { color: var(--color-fg-muted); font-size: 13px; margin: 0; }
+@media (max-width: 900px) { .bf-row { grid-template-columns: 1fr; } .bf-map { height: 320px; } }
+</style>
+
+<div class="kit-page">
+  <h1>Bakery Franchises</h1>
+  <p class="kit-sub">Sales across a sample bakery franchise network, 1 to 17 May 2024. Pick a franchise on the map or in the table to read its customer reviews.</p>
+
+  <div class="bf-filters">
+    <div id="bf-filters"></div>
+    <button type="button" class="kit-btn" id="bf-reset">Reset</button>
+  </div>
+
+  <div id="bf-tiles" data-source="franchises"></div>
+
+  <div class="bf-row">
+    <section class="kit-card" aria-labelledby="bf-map-h">
+      <h2 id="bf-map-h">Where the franchises are</h2>
+      <div id="bf-map" class="bf-map" data-source="franchises"></div>
+      <p class="bf-note">Circle area shows revenue. Click a circle to read that franchise's reviews; the league table below does the same from the keyboard.</p>
+    </section>
+    <section class="kit-card" aria-labelledby="bf-reviews-h" aria-live="polite">
+      <div class="bf-reviews-head">
+        <h2 id="bf-reviews-h">Customer reviews</h2>
+        <button type="button" class="kit-btn" id="bf-clear" hidden>Clear selection</button>
+      </div>
+      <div id="bf-reviews" data-source="reviews"><p class="bf-hint">Pick a franchise on the map or in the table.</p></div>
+    </section>
+  </div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card">
+      <h2>Daily revenue</h2>
+      <div id="bf-daily" data-source="daily"></div>
+    </section>
+    <section class="kit-card">
+      <h2>Revenue by product</h2>
+      <div id="bf-products" data-source="products"></div>
+    </section>
+    <section class="kit-card">
+      <h2>Payment method mix</h2>
+      <div id="bf-payments" data-source="payments"></div>
+      <p class="bf-note">Share of transactions by card brand.</p>
+    </section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px">
+    <h2>Franchise league table</h2>
+    <div id="bf-table" data-source="franchises"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const { fmt, h, num } = kit;
+  const state = { selected: null };   // the franchise row picked on the map or in the table
+  const drawn = {};                   // what each section was last drawn from, so unrelated updates don't redraw it
+
+  // Redraw a section only when one of its inputs changed (a new result array or a new status).
+  const changed = (name, ...deps) => {
+    const key = deps.map((d) => (d && typeof d === 'object' && 'status' in d ? [d.status, d.data] : [d]));
+    const prev = drawn[name];
+    const same = prev && prev.length === key.length && prev.every((p, i) => p.length === key[i].length && p.every((x, j) => x === key[i][j]));
+    drawn[name] = key;
+    return !same;
+  };
+
+  // Theme colour for the map circles (canvas needs a real colour, not a CSS variable).
+  const themeColour = (names, fallback) => {
+    const css = getComputedStyle(document.documentElement);
+    for (const v of names) { const c = css.getPropertyValue(v).trim(); if (c) return c; }
+    return fallback;
+  };
+
+  /* ---- Country filter (sent to SQL) ---- */
+  const bar = kit.filters('#bf-filters', [
+    { id: 'country', label: 'Country', type: 'select', all: 'All countries', value: dash.params().country || '' },
+  ], (v) => {
+    dash.setParams({ country: v.country || null });
+    if (state.selected && v.country && state.selected.country !== v.country) select(null);
+  });
+  document.getElementById('bf-reset').addEventListener('click', () => {
+    bar.set('country', '');
+    dash.setParams({ country: null });
+    select(null);
+  });
+
+  /* ---- Selection: loads the reviews dataset with the franchise_id parameter ---- */
+  function select(row) {
+    state.selected = row;
+    document.getElementById('bf-clear').hidden = !row;
+    if (row) dash.setParams({ franchise_id: row.franchise_id });
+    drawn.reviews = null;
+    drawn.map = null;
+    draw();
+  }
+  document.getElementById('bf-clear').addEventListener('click', () => select(null));
+
+  /* ---- Map: kit.map gives the base map and tiles; circles are sized by revenue ---- */
+  const kmap = kit.map('#bf-map', { dark: matchMedia('(prefers-color-scheme: dark)').matches });
+  const L_ = window.L;
+  const circles = kmap && L_ ? L_.featureGroup().addTo(kmap.map) : null;
+  let fitKey = null, fitted = false;
+  // Frame the circles once the map box has a size (a map drawn before its box is laid out measures 0 x 0).
+  const fit = () => {
+    if (!kmap || !circles || !circles.getLayers().length) return;
+    kmap.map.invalidateSize({ animate: false });
+    const size = kmap.map.getSize();
+    if (!size.x || !size.y) return;
+    kmap.map.fitBounds(circles.getBounds().pad(0.15), { maxZoom: 9 });
+    fitted = true;
+  };
+
+  function drawMap(rows) {
+    if (!circles) return;
+    const colour = themeColour(['--brand', '--chart-1'], '#4F46E5');
+    const ink = themeColour(['--color-fg'], '#000');
+    const top = Math.max(1, ...rows.map((r) => num(r.revenue) || 0));
+    circles.clearLayers();
+    for (const r of rows) {
+      const lat = num(r.latitude), lon = num(r.longitude);
+      if (lat === null || lon === null) continue;
+      const picked = state.selected && state.selected.franchise_id === r.franchise_id;
+      const c = L_.circleMarker([lat, lon], {
+        radius: 4 + 16 * Math.sqrt((num(r.revenue) || 0) / top),
+        color: picked ? ink : colour, weight: picked ? 3 : 1, fillColor: colour, fillOpacity: picked ? 0.85 : 0.45,
+      });
+      c.bindTooltip(h('div', null, h('strong', null, r.name), h('br'), `${r.city}, ${r.country} · size ${r.size}`, h('br'),
+        `${fmt.money(r.revenue)} from ${fmt.num(r.transactions)} transactions`), { direction: 'top' });
+      c.on('click', () => select(r));
+      circles.addLayer(c);
+    }
+    const key = rows.map((r) => r.franchise_id).join(',');
+    if (key !== fitKey) { fitKey = key; fitted = false; fit(); setTimeout(fit, 0); }
+  }
+  if (window.ResizeObserver && kmap) new ResizeObserver(() => { if (!fitted) fit(); }).observe(document.getElementById('bf-map'));
+
+  /* ---- Reviews panel ---- */
+  function drawReviews() {
+    const el = document.getElementById('bf-reviews');
+    const title = document.getElementById('bf-reviews-h');
+    if (!state.selected) {
+      title.textContent = 'Customer reviews';
+      if (changed('reviews', null)) el.replaceChildren(h('p', { class: 'bf-hint' }, 'Pick a franchise on the map or in the table.'));
+      return;
+    }
+    const s = state.selected;
+    title.textContent = `Reviews of ${s.name}, ${s.city}`;
+    const d = dash.data('reviews');   // loads on first use, with the franchise_id set by select()
+    if (!changed('reviews', d, s.franchise_id)) return;
+    if (!kit.ready(el, d)) return;
+    if (!d.data.length) { el.replaceChildren(h('p', { class: 'bf-hint' }, 'No reviews for this franchise yet.')); return; }
+    el.replaceChildren(h('ul', { class: 'bf-reviews' }, d.data.map((r) => {
+      // Reviews arrive as short Markdown: an optional **headline** line, then the text. Shown as plain text.
+      const text = String(r.review || '').trim();
+      const m = text.match(/^\*\*(.+?)\*\*\s*\n?([\s\S]*)$/);
+      return h('li', null, h('time', { datetime: r.review_date }, fmt.date(r.review_date)),
+        m ? h('h3', null, m[1]) : null, h('p', null, (m ? m[2] : text).replace(/\*\*/g, '').trim()));
+    })));
+  }
+
+  /* ---- Everything else ---- */
+  function draw() {
+    const countries = dash.data('countries');
+    const fr = dash.data('franchises');
+    const daily = dash.data('daily');
+    const products = dash.data('products');
+    const payments = dash.data('payments');
+
+    if (countries.status === 'ok' && changed('countries', countries)) {
+      bar.options('country', countries.data.map((r) => ({ value: r.country, label: `${r.country} (${r.franchises})` })));
+    }
+
+    if (changed('tiles', fr) && kit.ready('#bf-tiles', fr)) {
+      const rows = fr.data;
+      const sum = (k) => rows.reduce((a, r) => a + (num(r[k]) || 0), 0);
+      const revenue = sum('revenue'), tx = sum('transactions');
+      const active = rows.filter((r) => (num(r.transactions) || 0) > 0).length;
+      kit.tiles('#bf-tiles', [
+        { label: 'Revenue', value: fmt.money(revenue) },
+        { label: 'Transactions', value: fmt.num(tx) },
+        { label: 'Units sold', value: fmt.num(sum('units')) },
+        { label: 'Average basket', value: fmt.money(tx ? revenue / tx : null, 2), note: 'Revenue per transaction' },
+        { label: 'Active franchises', value: fmt.num(active), note: `of ${fmt.num(rows.length)} listed` },
+      ]);
+    }
+
+    if (changed('map', fr) && fr.status === 'ok') drawMap(fr.data);
+    else if (fr.status !== 'ok' && changed('mapstate', fr) && circles) circles.clearLayers();
+
+    if (changed('table', fr) && kit.ready('#bf-table', fr)) {
+      kit.table('#bf-table', {
+        rows: fr.data,
+        sort: { key: 'revenue', dir: 'desc' },
+        csv: 'bakery-franchises',
+        empty: 'No franchises for this filter',
+        onRow: select,
+        columns: [
+          { key: 'name', label: 'Franchise' },
+          { key: 'city', label: 'City' },
+          { key: 'country', label: 'Country' },
+          { key: 'size', label: 'Size' },
+          { key: 'revenue', label: 'Revenue', align: 'right', fmt: (v) => fmt.money(v) },
+          { key: 'transactions', label: 'Transactions', align: 'right', fmt: (v) => fmt.num(v) },
+          { key: 'units', label: 'Units', align: 'right', fmt: (v) => fmt.num(v) },
+          { key: 'customers', label: 'Customers', align: 'right', fmt: (v) => fmt.num(v) },
+        ],
+      });
+    }
+
+    if (changed('daily', daily) && kit.ready('#bf-daily', daily)) {
+      if (!daily.data.length) document.getElementById('bf-daily').replaceChildren(h('p', { class: 'bf-hint' }, 'No sales for this filter.'));
+      else kit.line('#bf-daily', { rows: daily.data, x: 'day', series: [{ key: 'revenue', label: 'Revenue' }], fmt: fmt.compact, label: 'Revenue per day' });
+    }
+
+    if (changed('products', products) && kit.ready('#bf-products', products)) {
+      if (!products.data.length) document.getElementById('bf-products').replaceChildren(h('p', { class: 'bf-hint' }, 'No sales for this filter.'));
+      else kit.bars('#bf-products', { rows: products.data, label: 'product', value: 'revenue', fmt: (v) => fmt.money(v) });
+    }
+
+    if (changed('payments', payments) && kit.ready('#bf-payments', payments)) {
+      const total = payments.data.reduce((a, r) => a + (num(r.transactions) || 0), 0);
+      const rows = payments.data.map((r) => ({ method: r.payment_method, share: total ? (num(r.transactions) || 0) / total : null }));
+      if (!rows.length) document.getElementById('bf-payments').replaceChildren(h('p', { class: 'bf-hint' }, 'No sales for this filter.'));
+      else kit.bars('#bf-payments', { rows, label: 'method', value: 'share', fmt: (v) => fmt.pct(v) });
+    }
+
+    drawReviews();
+  }
+
+  // Tell Ask Genie what is on screen, when the dashboard has a Genie space (see README).
+  if (dash.genieContext) dash.genieContext(() => ({ Country: dash.params().country || 'All countries', Franchise: state.selected ? state.selected.name : '' }));
+
+  dash.onData(draw);
+  // Charts are sized to their box: redraw them when the window size changes.
+  addEventListener('resize', () => { drawn.daily = null; });
+})();
+</script>

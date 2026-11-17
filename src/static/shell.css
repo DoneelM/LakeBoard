@@ -1,0 +1,44 @@
+/* Theme: every colour the portal, the page kit and Ask Genie use is set here, once, as CSS custom properties.
+ * To rebrand, change the values in this block (and in the dark-mode block below). Pages use the same variables. */
+:root {
+  /* brand */
+  --brand: #4F46E5; --brand-strong: #4338CA; --brand-contrast: #FFFFFF; --accent: #818CF8; --focus: #6366F1;
+  /* left navigation */
+  --nav-bg: #0F172A; --nav-bg-2: #1E293B; --nav-fg: #CBD5E1; --nav-fg-strong: #FFFFFF; --nav-muted: #94A3B8;
+  --nav-heading: #A5B4FC; --nav-line: rgba(255, 255, 255, .10); --nav-hover: rgba(255, 255, 255, .06);
+  --nav-active: rgba(129, 140, 248, .18);
+  /* surfaces and text */
+  --color-fg: #0F172A; --color-fg-muted: #64748B; --color-bg: #F8FAFC; --color-panel: #FFFFFF; --color-border-line: #E2E8F0;
+  --color-ok: #15803D; --color-warn: #B45309; --color-bad: #B91C1C;
+  --signal-ok: #22C55E; --signal-warn: #F59E0B; --signal-bad: #EF4444;   /* tile tops, the environment badge */
+  --env-badge-fg: #1C1917;
+  /* charts: dash.colors reads --chart-1 .. --chart-8 */
+  --chart-1: #6366F1; --chart-2: #0EA5E9; --chart-3: #94A3B8; --chart-4: #F59E0B;
+  --chart-5: #10B981; --chart-6: #64748B; --chart-7: #EF4444; --chart-8: #A78BFA;
+  --map-bg: #0F172A;
+  /* tokens dashboard pages may use directly */
+  --cds-chart-grid: #E2E8F0; --cds-chart-axis: #94A3B8; --cds-chart-reference: #64748B; --cds-chart-muted: #CBD5E1;
+  --cds-chart-status-critical: #DC2626; --cds-surface-popover: #FFFFFF; --cds-border: #E2E8F0;
+  --cds-shadow-popover: 0 4px 16px rgba(15, 23, 42, .14); --cds-text-secondary: #64748B;
+  --cds-dur-slow: 240ms; --cds-ease-out: cubic-bezier(.2, .7, .2, 1);
+  --font-sans: Inter, Arial, system-ui, sans-serif;
+  --font-anthropic-sans: var(--font-sans); --font-anthropic-serif: var(--font-sans);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #6366F1; --brand-strong: #4F46E5; --accent: #A5B4FC; --focus: #818CF8;
+    --nav-bg: #020617; --nav-bg-2: #0F172A;
+    --color-fg: #E2E8F0; --color-fg-muted: #94A3B8; --color-bg: #0B1120; --color-panel: #111827; --color-border-line: #1F2937;
+    --color-ok: #4ADE80; --color-warn: #FBBF24; --color-bad: #F87171;
+    --chart-1: #818CF8; --chart-2: #38BDF8; --chart-3: #94A3B8; --chart-4: #FBBF24;
+    --chart-5: #34D399; --chart-6: #CBD5E1; --chart-7: #F87171; --chart-8: #C4B5FD;
+    --cds-chart-grid: #1F2937; --cds-chart-axis: #475569; --cds-chart-reference: #94A3B8; --cds-chart-muted: #334155;
+    --cds-surface-popover: #1E293B; --cds-border: #1F2937; --cds-shadow-popover: 0 4px 16px rgba(0, 0, 0, .5); --cds-text-secondary: #94A3B8;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: 15px/1.5 var(--font-sans); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.dash-skeleton { background: linear-gradient(90deg, var(--color-border-line), transparent, var(--color-border-line)); background-size: 200% 100%; min-height: 1em; }
+

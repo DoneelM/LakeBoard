@@ -1,0 +1,20 @@
+resources:
+  apps:
+    portal:
+      name: ${var.app_name}
+      description: LakeBoard - git-managed dashboards on the lakehouse. See docs/DESIGN.md.
+      source_code_path: ../src
+      user_api_scopes:
+        - sql                       # run dashboard queries as the signed-in user
+        - genie                     # Ask Genie, as the signed-in user (older name: dashboards.genie)
+        # user identity (iam.current-user:read) is a default scope and must not be listed
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
+      # Who can open the portal: the viewers group in every environment (variable viewers_group in databricks.yml).
+      # Dashboards can narrow this further with `groups:` in dashboard.yml.
+      permissions:
+        - group_name: ${var.viewers_group}
+          level: CAN_USE

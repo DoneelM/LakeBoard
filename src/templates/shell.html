@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[[title]] · [[brand]]</title>
+<link rel="icon" href="[[logo]]">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/static/shell.css?v=[[v]]">
+<link rel="stylesheet" href="/static/kit.css?v=[[v]]">
+[[libs_css]]
+<script>try { if (localStorage.getItem('portal-nav') === 'closed') document.documentElement.classList.add('pn-closed'); } catch (e) {}</script>
+<script src="/static/vendor/d3.v7.min.js"></script>
+[[libs_js]]
+<script>window.PORTAL = [[config]];</script>
+<script src="/static/dash.js?v=[[v]]"></script>
+<script src="/static/kit.js?v=[[v]]"></script>
+</head>
+<body>
+<a class="pn-skip" href="#dash-root">Skip to dashboard</a>
+<aside class="pn" id="portal-nav" aria-label="Dashboards">
+  <a class="pn-brand" href="/"[[home_current]]>
+    <img src="[[logo]]" alt="" height="30">
+    <span>[[brand]]</span>[[env_badge]]
+  </a>
+  <nav class="pn-list">
+[[nav]]
+  </nav>
+  <div class="pn-foot" title="[[user]]">[[user]]</div>
+</aside>
+<div class="pn-main">
+  <header class="pn-top">
+    <button type="button" class="pn-toggle" aria-controls="portal-nav" aria-label="Show or hide the dashboard list" onclick="portalNav()">☰</button>
+    <span class="pn-title">[[title]]</span>
+    [[refresh]]
+  </header>
+  <main id="dash-root">
+[[page]]
+  </main>
+</div>
+<div class="pn-scrim" onclick="portalNav()"></div>
+<script>
+function portalNav() {
+  const root = document.documentElement;
+  if (matchMedia('(max-width: 900px)').matches) { root.classList.toggle('pn-open'); return; }
+  const closed = root.classList.toggle('pn-closed');
+  try { localStorage.setItem('portal-nav', closed ? 'closed' : 'open'); } catch (e) {}
+  dispatchEvent(new Event('resize'));
+}
+</script>
+</body>
+</html>

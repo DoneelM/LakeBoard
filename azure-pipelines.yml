@@ -1,0 +1,144 @@
+name: lakeboard-$(Date:yyyyMMdd)$(Rev:.r)
+
+# Example Azure DevOps pipeline (the GitHub Actions equivalent is .github/workflows/deploy.yml):
+#   Push to develop  -> checks + deploy DEV
+#   Push to release  -> checks + deploy TEST
+#   Push to main     -> checks + deploy PROD
+#   PR to develop / release / main -> checks only (no deploy)
+# Replace the placeholders before use:
+#   - databricks-service-connection: an Azure Resource Manager service connection for a service principal that can
+#     deploy bundles and apps in each workspace.
+#   - lakeboard-dev-vars / lakeboard-test-vars / lakeboard-prod-vars: variable groups, each supplying DATABRICKS_HOST
+#     (https://<workspace host>).
+# Each deploy stage has `lockBehavior: sequential`, so two runs never deploy to the same environment at once (each
+# environment is one branch, one stage); the second waits for the first. See docs/decisions/0005.
+# docs/PROMOTION.md describes how a change moves through the three branches.
+
+trigger:
+  branches:
+    include: [develop, release, main]
+
+pr:
+  branches:
+    include: [develop, release, main]
+
+pool:
+  vmImage: ubuntu-latest
+
+parameters:
+  # Dev and test are stopped again after each deploy to save cost; start them when you need to test.
+  - name: keepDevRunning
+    displayName: Leave the dev app running after deploy
+    type: boolean
+    default: false
+  - name: keepTestRunning
+    displayName: Leave the test app running after deploy
+    type: boolean
+    default: false
+
+stages:
+
+# =========================
+# STAGE 1 - VALIDATE
+# Runs on: all PRs and all pushes to develop/release/main
+# =========================
+- stage: Validate
+  displayName: Checks and bundle validate
+  variables:
+    - group: lakeboard-dev-vars
+  jobs:
+  - job: checks
+    steps:
+    - checkout: self
+
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.11'
+
+    - script: pip install -r src/requirements.txt fastapi pytest httpx
+      displayName: Install
+
+    - script: python scripts/check.py --static && pytest -q
+      displayName: Dashboard checks (manifests, SQL rules, page rules)
+
+    - task: AzureCLI@2
+      displayName: "Get Databricks Token"
+      inputs:
+        azureSubscription: 'databricks-service-connection'
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          # 2ff814a6-... is the fixed application id of Azure Databricks (the same in every tenant).
+          TOKEN=$(az account get-access-token \
+            --resource 2ff814a6-3304-4ab8-85cb-cd0e6f879c1d \
+            --query accessToken -o tsv)
+
+          echo "##vso[task.setvariable variable=DATABRICKS_TOKEN;issecret=true]$TOKEN"
+
+    - script: |
+        curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | bash
+        databricks --version
+      displayName: Install Databricks CLI
+
+    - script: databricks bundle validate -t dev
+      displayName: Validate Bundle
+      env:
+        DATABRICKS_HOST: $(DATABRICKS_HOST)
+        DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+# =========================
+# STAGE 2 - DEPLOY DEV (push to develop)
+# =========================
+- stage: DeployDev
+  displayName: Deploy to Dev
+  lockBehavior: sequential   # one run at a time in this stage; later runs wait their turn (see header)
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  variables:
+    - group: lakeboard-dev-vars
+  jobs:
+  - job: deploy_dev
+    steps:
+    - template: pipelines/deploy-steps.yml
+      parameters:
+        target: dev
+        appName: lakeboard-dev
+        keepRunning: ${{ parameters.keepDevRunning }}
+
+# =========================
+# STAGE 3 - DEPLOY TEST (push to release)
+# =========================
+- stage: DeployTest
+  displayName: Deploy to Test
+  lockBehavior: sequential   # one run at a time in this stage; later runs wait their turn (see header)
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/release'))
+  variables:
+    - group: lakeboard-test-vars
+  jobs:
+  - job: deploy_test
+    steps:
+    - template: pipelines/deploy-steps.yml
+      parameters:
+        target: test
+        appName: lakeboard-test
+        keepRunning: ${{ parameters.keepTestRunning }}
+
+# =========================
+# STAGE 4 - DEPLOY PROD (push to main)
+# =========================
+- stage: DeployProd
+  displayName: Deploy to Prod
+  lockBehavior: sequential   # one run at a time in this stage; later runs wait their turn (see header)
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  variables:
+    - group: lakeboard-prod-vars
+  jobs:
+  - job: deploy_prod
+    steps:
+    - template: pipelines/deploy-steps.yml
+      parameters:
+        target: prod
+        appName: lakeboard
+        keepRunning: true

@@ -1,0 +1,94 @@
+# Deploys the bundle to one target, runs every dashboard query against that environment's catalogs,
+# starts the app with the new code, and (for dev and test) stops it again to save cost. Used by azure-pipelines.yml.
+parameters:
+  - name: target
+    type: string
+  - name: appName
+    type: string
+  - name: keepRunning
+    type: boolean
+    default: false
+
+steps:
+- checkout: self
+
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.11'
+
+- script: pip install -r src/requirements.txt
+  displayName: Install
+
+- task: AzureCLI@2
+  displayName: "Get Databricks Token"
+  inputs:
+    azureSubscription: 'databricks-service-connection'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      TOKEN=$(az account get-access-token \
+        --resource 2ff814a6-3304-4ab8-85cb-cd0e6f879c1d \
+        --query accessToken -o tsv)
+
+      echo "##vso[task.setvariable variable=DATABRICKS_TOKEN;issecret=true]$TOKEN"
+
+- script: |
+    curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | bash
+    databricks --version
+  displayName: Install Databricks CLI
+
+- script: databricks bundle validate -t ${{ parameters.target }}
+  displayName: Validate Bundle
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+- script: |
+    WAREHOUSE=$(databricks bundle validate -t ${{ parameters.target }} -o json | python -c "import json,sys; print(json.load(sys.stdin)['variables']['warehouse_id']['value'])")
+    python scripts/check.py --env ${{ parameters.target }} --warehouse "$WAREHOUSE"
+  displayName: Run every dataset (LIMIT 0) against ${{ parameters.target }} catalogs
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+# What each view reads, for the freshness label (the app's service principal has BROWSE only, which hides view
+# dependencies). Written to src/sources_map.json, which the bundle uploads (sync.include in databricks.yml). A failure
+# only warns: the app then follows views itself, as before.
+- script: python scripts/build_sources_map.py --env ${{ parameters.target }}
+  displayName: Build the source map for the freshness label
+  continueOnError: true
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+- script: databricks bundle deploy -t ${{ parameters.target }}
+  displayName: Deploy Bundle
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+- script: databricks bundle run portal -t ${{ parameters.target }}
+  displayName: Start the app with the new code
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+- ${{ if eq(parameters.keepRunning, false) }}:
+  # The CLI runs inside the bundle folder, where non-bundle commands use the bundle's default target (dev) unless
+  # -t is given. Without it, test deploys looked for the test app in the dev workspace and failed here.
+  # Retry a few times in case the app is still starting, and if it still fails, show what the workspace reports.
+  - script: |
+      for attempt in 1 2 3 4 5; do
+        if databricks -t ${{ parameters.target }} apps stop ${{ parameters.appName }}; then exit 0; fi
+        echo "Stop attempt $attempt failed; waiting 20 seconds"
+        sleep 20
+      done
+      echo "Could not stop the app. What the workspace reports:"
+      databricks -t ${{ parameters.target }} apps get ${{ parameters.appName }} -o json | python -c "import json,sys; a=json.load(sys.stdin); print({k: a.get(k) for k in ('name','url','app_status','compute_status')})" || true
+      databricks -t ${{ parameters.target }} apps list -o json | python -c "import json,sys; print([a.get('name') for a in json.load(sys.stdin)])" || true
+      exit 1
+    displayName: Stop the app (saves cost; start it when testing)
+    condition: always()   # also when the start step failed, so a broken deploy doesn't leave compute running
+    env:
+      DATABRICKS_HOST: $(DATABRICKS_HOST)
+      DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)

@@ -1,0 +1,103 @@
+# Checks every pull request, and deploys on push:
+#   develop -> dev, release -> test, main -> prod      (docs/PROMOTION.md)
+# The Azure DevOps equivalent is azure-pipelines.yml.
+#
+# Setup (replace the placeholders):
+#   1. Create three GitHub environments: dev, test, prod (Settings > Environments). Add required reviewers on prod
+#      if you want a person to approve each prod deploy.
+#   2. In each environment, add:
+#        variable DATABRICKS_HOST           https://<workspace host>   (as in databricks.yml)
+#        secret   DATABRICKS_CLIENT_ID      the deploying service principal's application (client) id
+#        secret   DATABRICKS_CLIENT_SECRET  an OAuth secret for that service principal
+#      To use GitHub OIDC (workload identity federation) instead of a secret, add a federation policy for the service
+#      principal in Databricks, drop DATABRICKS_CLIENT_SECRET and set DATABRICKS_AUTH_TYPE: github-oidc (see below).
+#   3. The service principal needs to deploy bundles and manage apps in each workspace, CAN_USE on the warehouse,
+#      and SELECT on what the dashboards read (the deploy runs every query with LIMIT 0).
+name: deploy
+
+on:
+  pull_request:
+    branches: [develop, release, main]
+  push:
+    branches: [develop, release, main]
+  workflow_dispatch:
+    inputs:
+      keep_running:
+        description: Leave the dev or test app running after deploy
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write   # only needed for GitHub OIDC auth
+
+jobs:
+  checks:
+    name: Checks (manifests, SQL rules, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # the Python version Databricks Apps uses
+      - run: pip install -r src/requirements.txt fastapi pytest httpx
+      - run: python scripts/check.py --static
+      - run: python -m pytest -q
+
+  deploy:
+    name: Deploy to ${{ github.ref_name == 'main' && 'prod' || github.ref_name == 'release' && 'test' || 'dev' }}
+    needs: checks
+    if: github.event_name != 'pull_request' && contains(fromJSON('["develop", "release", "main"]'), github.ref_name)
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'prod' || github.ref_name == 'release' && 'test' || 'dev' }}
+    # One deploy per environment at a time; a later run waits for the earlier one instead of cancelling it.
+    concurrency:
+      group: deploy-${{ github.ref_name }}
+      cancel-in-progress: false
+    env:
+      TARGET: ${{ github.ref_name == 'main' && 'prod' || github.ref_name == 'release' && 'test' || 'dev' }}
+      APP_NAME: ${{ github.ref_name == 'main' && 'lakeboard' || github.ref_name == 'release' && 'lakeboard-test' || 'lakeboard-dev' }}
+      KEEP_RUNNING: ${{ github.ref_name == 'main' || inputs.keep_running == true }}
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      # DATABRICKS_AUTH_TYPE: github-oidc   # with OIDC instead of a client secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r src/requirements.txt
+      - uses: databricks/setup-cli@main
+
+      - name: Validate bundle
+        run: databricks bundle validate -t "$TARGET"
+
+      - name: Run every dataset (LIMIT 0) against the ${{ env.TARGET }} catalogs
+        run: |
+          WAREHOUSE=$(databricks bundle validate -t "$TARGET" -o json | python -c "import json,sys; print(json.load(sys.stdin)['variables']['warehouse_id']['value'])")
+          python scripts/check.py --env "$TARGET" --warehouse "$WAREHOUSE"
+
+      # What each view reads, for the freshness label. A failure only warns: the app then follows views itself.
+      - name: Build the source map for the freshness label
+        continue-on-error: true
+        run: python scripts/build_sources_map.py --env "$TARGET"
+
+      - name: Deploy bundle
+        run: databricks bundle deploy -t "$TARGET"
+
+      - name: Start the app with the new code
+        run: databricks bundle run portal -t "$TARGET"
+
+      # Dev and test are stopped again to save cost; start them when you need to test. Also runs when the start
+      # step failed, so a broken deploy doesn't leave compute running.
+      - name: Stop the app (dev and test)
+        if: always() && env.KEEP_RUNNING != 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if databricks -t "$TARGET" apps stop "$APP_NAME"; then exit 0; fi
+            echo "Stop attempt $attempt failed; waiting 20 seconds"
+            sleep 20
+          done
+          echo "Could not stop the app $APP_NAME."
+          exit 1

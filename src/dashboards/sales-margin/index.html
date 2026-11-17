@@ -1,0 +1,276 @@
+<style>
+.sm-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 16px; margin-bottom: 12px; }
+.sm-head .kit-sub { margin: 0; }
+.sm-stack { display: grid; gap: 12px; margin-top: 12px; }
+.sm-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sm-card-head h2 { margin: 0; font-size: 14px; font-weight: 700; }
+.sm-toggle { display: inline-flex; }
+.sm-toggle .kit-btn + .kit-btn { border-left: 0; }
+.sm-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 13px; }
+.sm-crumbs li + li::before { content: "›"; margin-right: 4px; color: var(--color-fg-muted); }
+.sm-crumbs button { font: inherit; color: var(--color-fg); background: none; border: 0; padding: 2px 0; cursor: pointer; text-decoration: underline; }
+.sm-crumbs [aria-current] { font-weight: 700; }
+.sm-hint { margin: 0 0 8px; font-size: 12px; color: var(--color-fg-muted); }
+.sm-recon { margin: 8px 0 0; padding: 8px 10px; font-size: 13px; border-left: 3px solid var(--color-border-line); background: var(--color-bg); }
+.sm-recon.sm-ok { border-left-color: var(--color-ok); }
+.sm-recon.sm-bad { border-left-color: var(--color-bad); color: var(--color-bad); }
+.sm-recon strong { font-variant-numeric: tabular-nums; }
+.sm-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+#sm-root :focus-visible { outline: 3px solid var(--focus, var(--color-fg)); outline-offset: 1px; }
+</style>
+
+<div class="kit-page" id="sm-root">
+  <div class="sm-head">
+    <div>
+      <h1>Sales &amp; Margin</h1>
+      <p class="kit-sub" id="sm-period">Revenue, discount and gross margin against the year before. Sample data (TPC-H).</p>
+    </div>
+  </div>
+
+  <div id="sm-filters" role="group" aria-label="Filters"></div>
+
+  <div class="sm-stack">
+    <section aria-label="Headline figures"><div id="sm-tiles" data-source="kpis"></div></section>
+
+    <section class="kit-card" aria-labelledby="sm-trend-h" data-source="trend">
+      <div class="sm-card-head">
+        <h2 id="sm-trend-h">By month</h2>
+        <div class="sm-toggle" role="group" aria-label="Measure">
+          <button type="button" class="kit-btn" data-measure="net" aria-pressed="true">Net revenue</button>
+          <button type="button" class="kit-btn" data-measure="margin" aria-pressed="false">Gross margin</button>
+        </div>
+      </div>
+      <div id="sm-trend"></div>
+    </section>
+
+    <section class="kit-card" aria-labelledby="sm-drill-h" data-source="regions nations customers">
+      <div class="sm-card-head"><h2 id="sm-drill-h">By region</h2></div>
+      <ol class="sm-crumbs" id="sm-crumbs" aria-label="Drill-down level"></ol>
+      <p class="sm-hint" id="sm-hint"></p>
+      <div id="sm-drill"></div>
+      <p class="sm-recon" id="sm-recon" aria-live="polite" hidden></p>
+    </section>
+
+    <div class="kit-grid">
+      <section class="kit-card" aria-labelledby="sm-seg-h" data-source="segments">
+        <h2 id="sm-seg-h">Net revenue by market segment</h2>
+        <div id="sm-seg"></div>
+        <p class="sm-note" id="sm-seg-note"></p>
+      </section>
+      <section class="kit-card" aria-labelledby="sm-ship-h" data-source="shipping">
+        <h2 id="sm-ship-h">Late deliveries by ship mode</h2>
+        <div id="sm-ship"></div>
+        <p class="sm-note" id="sm-ship-note"></p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const { fmt, num, h } = kit;
+  const YEARS = ['1992', '1993', '1994', '1995', '1996', '1997', '1998'];  // orders run 1992-01-01 to 1998-08-02
+  const REGIONS = ['AFRICA', 'AMERICA', 'ASIA', 'EUROPE', 'MIDDLE EAST'];
+  let measure = 'net';
+
+  const money = (v) => (num(v) === null ? fmt.text(null) : (num(v) < 0 ? '-$' : '$') + fmt.compact(Math.abs(num(v))));
+  const ratio = (a, b) => (num(a) === null || !num(b) ? null : num(a) / num(b));
+  const title = (s) => String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  const change = (cy, py, prior) => {
+    const r = ratio(num(cy) - num(py), py);
+    if (r === null || num(cy) === null) return `No ${prior} to compare`;
+    return `${r >= 0 ? '▲ +' : '▼ '}${fmt.pct(r)} vs ${prior}`;
+  };
+
+  /* ---- Filters: year and region are SQL parameters; region is also the first drill-down level ---- */
+  const p0 = dash.params();
+  const bar = kit.filters('#sm-filters', [
+    { id: 'year', label: 'Year', type: 'select', all: false, options: YEARS, value: String(p0.year || 1997) },
+    { id: 'region', label: 'Region', type: 'select', all: 'All regions', options: REGIONS.map((r) => ({ value: r, label: title(r) })), value: p0.region || '' },
+  ], (v, id) => {
+    if (id === 'year') dash.setParams({ year: v.year });
+    if (id === 'region') dash.setParams({ region: v.region || null, nation: null });
+  });
+  const reset = h('button', { type: 'button', class: 'kit-btn', onclick: () => { dash.resetParams(); bar.set('year', String(dash.params().year)); bar.set('region', ''); } }, 'Reset filters');
+  document.getElementById('sm-filters').append(reset);
+
+  const drillTo = (region, nation) => {
+    dash.setParams({ region: region || null, nation: nation || null });
+    bar.set('region', region || '');
+  };
+
+  for (const b of document.querySelectorAll('[data-measure]')) {
+    b.addEventListener('click', () => {
+      measure = b.dataset.measure;
+      for (const x of document.querySelectorAll('[data-measure]')) x.setAttribute('aria-pressed', String(x === b));
+      draw();
+    });
+  }
+
+  /* ---- Drawing ---- */
+  function draw() {
+    const p = dash.params();
+    const year = String(p.year || 1997);
+    const prior = String(+year - 1);
+    const where = p.region ? title(p.region) : 'all regions';
+    const kpis = dash.data('kpis');
+
+    // Headline tiles
+    if (kit.ready('#sm-tiles', kpis)) {
+      const k = kpis.data[0] || {};
+      const part = k.period_end && !String(k.period_end).endsWith('-12-31');
+      document.getElementById('sm-period').textContent =
+        `Orders placed ${fmt.date(k.period_start)} to ${fmt.date(k.period_end)}, ${where}, against the same dates in ${prior}` +
+        (part ? ` (${year} is a part year).` : '.');
+      const mp = ratio(k.margin, k.net), pmp = ratio(k.py_margin, k.py_net);
+      kit.tiles('#sm-tiles', [
+        { label: 'Gross revenue', value: money(k.gross), note: change(k.gross, k.py_gross, prior) },
+        { label: 'Discount given', value: money(k.discount), note: `${fmt.pct(ratio(k.discount, k.gross))} of gross` },
+        { label: 'Net revenue', value: money(k.net), note: change(k.net, k.py_net, prior) },
+        { label: 'Gross margin', value: money(k.margin), note: change(k.margin, k.py_margin, prior) },
+        { label: 'Margin %', value: fmt.pct(mp), note: pmp === null ? `No ${prior} to compare` : `${prior}: ${fmt.pct(pmp)}` },
+        { label: 'Orders', value: fmt.num(k.orders), note: `${fmt.num(k.customers)} customers` },
+      ]);
+    }
+
+    // Monthly trend against the prior year
+    const trend = dash.data('trend');
+    if (kit.ready('#sm-trend', trend)) {
+      if (!trend.data.length) document.getElementById('sm-trend').replaceChildren(h('div', { class: 'kit-state' }, 'No orders in this period.'));
+      else kit.line('#sm-trend', {
+        rows: trend.data, x: 'month', fmt: money,
+        label: `${measure === 'net' ? 'Net revenue' : 'Gross margin'} by month, ${year} against ${prior}`,
+        series: [{ key: measure, label: year }, { key: 'py_' + measure, label: `${prior} (same dates)` }],
+      });
+    }
+
+    drawDrill(p, year, kpis);
+
+    // Market segments
+    const seg = dash.data('segments');
+    if (kit.ready('#sm-seg', seg)) {
+      const rows = seg.data.map((r) => ({ ...r, label: `${title(r.segment)} · ${fmt.pct(ratio(r.margin, r.net))}` }));
+      if (!rows.length) document.getElementById('sm-seg').replaceChildren(h('div', { class: 'kit-state' }, 'No orders in this period.'));
+      else kit.bars('#sm-seg', { rows, label: 'label', value: 'net', fmt: money });
+      document.getElementById('sm-seg-note').textContent = rows.length ? `Percentages are gross margin. ${where[0].toUpperCase() + where.slice(1)}, ${year}.` : '';
+    }
+
+    // Late deliveries
+    const ship = dash.data('shipping');
+    if (kit.ready('#sm-ship', ship)) {
+      const rows = ship.data.map((r) => ({ ...r, mode: title(r.ship_mode) }));
+      if (!rows.length) document.getElementById('sm-ship').replaceChildren(h('div', { class: 'kit-state' }, 'No orders in this period.'));
+      else kit.bars('#sm-ship', { rows, label: 'mode', value: 'late_share', fmt: (v) => fmt.pct(v) });
+      const lines = rows.reduce((a, r) => a + (num(r.lines) || 0), 0), late = rows.reduce((a, r) => a + (num(r.late_lines) || 0), 0);
+      document.getElementById('sm-ship-note').textContent = lines
+        ? `${fmt.pct(late / lines)} of ${fmt.num(lines)} order lines arrived after their commit date. Late lines arrived ${fmt.num(d3.mean(rows, (r) => num(r.avg_days_late)), 1)} days late on average.`
+        : '';
+    }
+  }
+
+  /* ---- Drill-down: regions -> nations (dataset loads when a region is picked) -> top customers (when a nation is picked) ---- */
+  function drawDrill(p, year, kpis) {
+    const level = p.nation ? 'customers' : p.region ? 'nations' : 'regions';
+    const crumbs = document.getElementById('sm-crumbs');
+    const items = [['All regions', () => drillTo(null, null)]];
+    if (p.region) items.push([title(p.region), () => drillTo(p.region, null)]);
+    if (p.nation) items.push([title(p.nation), null]);
+    crumbs.replaceChildren(...items.map(([label, go], i) => h('li', null, i === items.length - 1
+      ? h('span', { 'aria-current': 'location' }, label)
+      : h('button', { type: 'button', onclick: go }, label))));
+    document.getElementById('sm-drill-h').textContent =
+      level === 'regions' ? `By region, ${year}` : level === 'nations' ? `Nations in ${title(p.region)}, ${year}` : `Top customers in ${title(p.nation)}, ${year}`;
+    document.getElementById('sm-hint').textContent =
+      level === 'regions' ? 'Select a region to see its nations.' : level === 'nations' ? 'Select a nation to see its largest customers.' : '';
+
+    const recon = document.getElementById('sm-recon');
+    const say = (ok, ...parts) => { recon.hidden = false; recon.className = 'sm-recon ' + (ok ? 'sm-ok' : 'sm-bad'); recon.replaceChildren(...parts); };
+    const sum = (rows, k) => rows.reduce((a, r) => a + (num(r[k]) || 0), 0);
+    const same = (a, b) => Math.abs(a - b) < 1;  // each row is rounded to cents, so allow under a dollar
+    recon.hidden = true;
+
+    const money2 = (v) => fmt.money(v, 0);
+    const pctCol = { key: 'margin_pct', label: 'Margin %', align: 'right', fmt: (v) => fmt.pct(v) };
+    const withPct = (rows) => rows.map((r) => ({ ...r, margin_pct: ratio(r.margin, r.net) }));
+    const k = kpis.status === 'ok' ? kpis.data[0] || {} : null;
+
+    if (level === 'regions') {
+      const d = dash.data('regions');
+      if (!kit.ready('#sm-drill', d)) return;
+      kit.table('#sm-drill', {
+        rows: withPct(d.data), csv: `sales-margin-regions-${year}`, empty: 'No orders in this year',
+        onRow: (r) => drillTo(r.region, null),
+        columns: [
+          { key: 'region', label: 'Region', fmt: title },
+          { key: 'gross', label: 'Gross revenue', align: 'right', fmt: money2 },
+          { key: 'discount', label: 'Discount', align: 'right', fmt: money2 },
+          { key: 'net', label: 'Net revenue', align: 'right', fmt: money2 },
+          { key: 'margin', label: 'Gross margin', align: 'right', fmt: money2 },
+          pctCol,
+          { key: 'orders', label: 'Orders', align: 'right', fmt: fmt.num },
+        ],
+      });
+      const total = sum(d.data, 'net');
+      // The regions dataset is never filtered by region, so it only matches the tiles when no region is picked.
+      if (k && !p.region && d.data.length) {
+        const ok = same(total, num(k.net));
+        say(ok, `Check: the ${d.data.length} regions add up to `, h('strong', null, money2(total)), ' net revenue',
+          ok ? ', the same as the Net revenue tile.' : `, but the Net revenue tile shows ${money2(k.net)}.`);
+      }
+    } else if (level === 'nations') {
+      const d = dash.data('nations');
+      const reg = dash.data('regions');
+      if (!kit.ready('#sm-drill', d)) return;
+      kit.table('#sm-drill', {
+        rows: withPct(d.data), csv: `sales-margin-${p.region.toLowerCase().replace(/\W+/g, '-')}-${year}`, empty: 'No orders in this region and year',
+        onRow: (r) => drillTo(p.region, r.nation),
+        columns: [
+          { key: 'nation', label: 'Nation', fmt: title },
+          { key: 'gross', label: 'Gross revenue', align: 'right', fmt: money2 },
+          { key: 'discount', label: 'Discount', align: 'right', fmt: money2 },
+          { key: 'net', label: 'Net revenue', align: 'right', fmt: money2 },
+          { key: 'margin', label: 'Gross margin', align: 'right', fmt: money2 },
+          pctCol,
+          { key: 'orders', label: 'Orders', align: 'right', fmt: fmt.num },
+          { key: 'customers', label: 'Customers', align: 'right', fmt: fmt.num },
+        ],
+      });
+      const total = sum(d.data, 'net');
+      const row = reg.status === 'ok' ? reg.data.find((r) => r.region === p.region) : null;
+      if (row && k && d.data.length) {
+        const ok = same(total, num(row.net)) && same(total, num(k.net));
+        say(ok, `Check: the ${d.data.length} nations add up to `, h('strong', null, money2(total)), ' net revenue',
+          ok ? `, the same as the ${title(p.region)} row and the Net revenue tile.` : `; the ${title(p.region)} row shows ${money2(row.net)} and the tile ${money2(k.net)}.`);
+      }
+    } else {
+      const d = dash.data('customers');
+      const nat = dash.data('nations');
+      if (!kit.ready('#sm-drill', d)) return;
+      kit.table('#sm-drill', {
+        rows: withPct(d.data), csv: `sales-margin-customers-${p.nation.toLowerCase().replace(/\W+/g, '-')}-${year}`,
+        empty: 'No customers ordered in this nation and year',
+        columns: [
+          { key: 'customer', label: 'Customer' },
+          { key: 'segment', label: 'Segment', fmt: title },
+          { key: 'orders', label: 'Orders', align: 'right', fmt: fmt.num },
+          { key: 'net', label: 'Net revenue', align: 'right', fmt: money2 },
+          { key: 'discount', label: 'Discount', align: 'right', fmt: money2 },
+          { key: 'margin', label: 'Gross margin', align: 'right', fmt: money2 },
+          pctCol,
+        ],
+      });
+      const first = d.data[0];
+      const row = nat.status === 'ok' ? nat.data.find((r) => r.nation === p.nation) : null;
+      if (first) {
+        const top = sum(d.data, 'net'), all = num(first.nation_net);
+        const ok = !row || same(all, num(row.net));
+        say(ok, `The top ${d.data.length} of ${fmt.num(first.nation_customers)} customers hold `, h('strong', null, money2(top)),
+          ` (${fmt.pct(top / all)}) of ${title(p.nation)}'s ${money2(all)} net revenue`,
+          row ? (ok ? `, which matches the ${title(p.nation)} row.` : `; the ${title(p.nation)} row shows ${money2(row.net)}.`) : '.');
+      }
+    }
+  }
+
+  dash.onData(draw);
+})();
+</script>

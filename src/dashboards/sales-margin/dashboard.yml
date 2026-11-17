@@ -1,0 +1,68 @@
+title: Sales & Margin
+description: Revenue, discount and gross margin for a year against the year before, by month, region, nation, customer segment and ship mode. Sample data (TPC-H).
+owner: Samples
+section: Samples
+order: 10
+groups: []                        # everyone who can use the portal
+params:
+  year:   {type: INT, default: 1997}   # order year; orders run 1992-01-01 to 1998-08-02, so 1998 is a part year
+  region: {type: STRING}               # optional; blank = all regions. Also the first level of the drill-down
+  nation: {type: STRING}               # set by clicking a nation; loads its top customers
+# Every dataset uses `cache: shared`: samples.tpch is read-only sample data that every user may read and that has
+# no row-level security, so one cached result can serve everyone. The data never changes, so results are kept 24 hours.
+datasets:
+  kpis:
+    title: Headline figures
+    description: Gross and net revenue, discount, gross margin, orders and customers for the year (and region), with the same dates a year earlier.
+    sql: sql/kpis.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {year: 1997}
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
+  trend:
+    title: Monthly trend
+    description: Net revenue and gross margin by month against the same months a year earlier.
+    sql: sql/trend.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {year: 1997}
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
+  regions:
+    title: By region
+    description: Revenue and margin per region for the year. The rows add up to the headline figures.
+    sql: sql/regions.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {year: 1997}
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
+  nations:
+    title: Nations in a region
+    description: Revenue and margin per nation in the region picked. Loads when a region is clicked.
+    sql: sql/nations.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
+  customers:
+    title: Top customers in a nation
+    description: The 50 largest customers by net revenue in the nation picked, with the nation total. Loads when a nation is clicked.
+    sql: sql/customers.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
+  segments:
+    title: By market segment
+    description: Net revenue, gross margin and customers per customer market segment.
+    sql: sql/segments.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
+  shipping:
+    title: Late deliveries by ship mode
+    description: Share of order lines received after their commit date, per ship mode.
+    sql: sql/shipping.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"

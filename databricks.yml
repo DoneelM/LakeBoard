@@ -1,0 +1,61 @@
+# LakeBoard: one Databricks App hosting every dashboard under src/dashboards/.
+# Deployed by CI: develop -> dev, release -> test, main -> prod (docs/PROMOTION.md). Example pipelines:
+# .github/workflows/deploy.yml (GitHub Actions) and azure-pipelines.yml (Azure DevOps).
+# Which catalogs each environment reads is set in src/environments.yml, not here.
+#
+# Before the first deploy, replace every placeholder below: the workspace hosts, the SQL warehouse ids and the
+# group that may open the app. The hosts must match src/environments.yml.
+bundle:
+  name: lakeboard
+
+include:
+  - resources/*.yml
+
+# src/sources_map.json is written by the pipeline just before deploy (scripts/build_sources_map.py) and is gitignored,
+# and the bundle leaves gitignored files out of the upload unless they are listed here.
+sync:
+  include:
+    - src/sources_map.json
+
+variables:
+  app_name:
+    description: Databricks App name
+    default: lakeboard
+  warehouse_id:
+    description: SQL warehouse the portal queries (serverless recommended)
+  viewers_group:
+    description: Workspace group whose members may open the portal
+    default: lakeboard-users   # replace with your own group
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://adb-0000000000000000.0.azuredatabricks.net/   # replace: your dev workspace
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      app_name: lakeboard-dev
+      warehouse_id: "0000000000000000"   # replace: a SQL warehouse id in the dev workspace
+
+  test:
+    workspace:
+      host: https://adb-1111111111111111.1.azuredatabricks.net/   # replace: your test workspace
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      app_name: lakeboard-test
+      warehouse_id: "1111111111111111"   # replace: a SQL warehouse id in the test workspace
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-2222222222222222.2.azuredatabricks.net/   # replace: your prod workspace
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      warehouse_id: "2222222222222222"   # replace: a SQL warehouse id in the prod workspace
+    # More people in prod: add groups here (they are merged with the permissions in resources/portal.app.yml).
+    # resources:
+    #   apps:
+    #     portal:
+    #       permissions:
+    #         - group_name: finance-viewers
+    #           level: CAN_USE

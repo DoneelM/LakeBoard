@@ -1,0 +1,9 @@
+LakeBoard
+Copyright 2026 Doneel Maran
+
+This product includes software developed by Doneel Maran
+(https://github.com/DoneelM/LakeBoard).
+
+This product bundles third-party libraries under src/static/vendor, each under its own licence:
+- D3 7.9.0 (https://d3js.org), ISC License, Copyright 2010-2023 Mike Bostock
+- Leaflet 1.9.4 (https://leafletjs.com), BSD 2-Clause License, (c) 2010-2023 Vladimir Agafonkin, (c) 2010-2011 CloudMade

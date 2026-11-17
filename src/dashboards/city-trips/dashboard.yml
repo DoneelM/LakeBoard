@@ -1,0 +1,50 @@
+title: City Trips
+description: Taxi trips in New York City, Jan–Feb 2016 - volumes, fares, busy hours and busy ZIP codes. Built on the samples catalog every workspace has.
+owner: Samples
+section: Samples
+order: 10
+groups: []                # everyone who can use the portal
+
+# Filters sent to SQL. The sample data is historic (pickups 1 Jan to 29 Feb 2016), so the defaults are fixed
+# dates rather than @week_start / @week_end, which would show nothing.
+params:
+  date_from: {type: DATE, default: "2016-01-01"}
+  date_to:   {type: DATE, default: "2016-02-29"}
+
+# Every dataset reads samples.nyctaxi.trips, which every workspace user can read and which has no row-level
+# security, so one cached result can be shared by all viewers (cache: shared). The data never changes, so a long
+# cache_ttl is safe. `warm:` pre-loads the default date range in the background (at app start and at the times in
+# src/environments.yml, in the environments listed there), so the first viewer does not wait.
+datasets:
+  daily:
+    title: Trips by day
+    description: Trips, fares, miles and minutes for each pickup day.
+    sql: sql/daily.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {date_from: "2016-01-01", date_to: "2016-02-29"}
+  hours:
+    title: Trips by weekday and hour
+    description: Trip counts for each weekday and hour of pickup.
+    sql: sql/hours.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {date_from: "2016-01-01", date_to: "2016-02-29"}
+  zips:
+    title: Busiest ZIP codes
+    description: The 10 busiest pickup and the 10 busiest dropoff ZIP codes, with the average fare.
+    sql: sql/zips.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {date_from: "2016-01-01", date_to: "2016-02-29"}
+  bands:
+    title: Fares by distance
+    description: Trip count and fare percentiles (10th, 25th, median, 75th, 90th) for five distance bands.
+    sql: sql/bands.sql
+    cache: shared
+    cache_ttl: 24h
+    warm:
+      - {date_from: "2016-01-01", date_to: "2016-02-29"}
