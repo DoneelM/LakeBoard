@@ -6,7 +6,8 @@
 
 LakeBoard's runtime accepts dashboard files from any author, but its most complete agent checklist lived in a
 Claude Code skill. The design also described Claude artifact compatibility as a goal. Business authors need
-to build with their preferred coding agent, use Genie MCP for data context, and hand work to the data team.
+to build with their preferred coding agent, use Databricks Genie One MCP for data context, and hand work to
+the data team.
 
 ## Decision
 
@@ -14,8 +15,10 @@ to build with their preferred coding agent, use Genie MCP for data context, and 
 - Keep the file format and supported `dash`/`kit` APIs in `docs/AUTHORING.md` as the hosting contract.
 - Prefer direct repository authoring. External previews are optional and must be adapted to that contract.
 - Document repository and folder-handoff routes for business authors in `docs/BUSINESS_AUTHORS.md`.
-- Use connected Genie MCP tools when available to clarify sources and definitions. Query results and generated
-  SQL still need validation. Schema objects, permissions and hosted-app operations remain separate tasks.
+- Use connected Databricks Genie One MCP tools when available to clarify sources and definitions. Query results
+  and generated SQL still need validation. Schema objects, permissions and hosted-app operations remain separate tasks.
+- Distinguish authoring-time Databricks Genie One MCP from the optional runtime Ask Genie integration, which
+  continues to use a curated Genie agent per dashboard.
 - Keep agent-specific entry points thin. Authors whose tools do not discover repository rules can explicitly
   provide the same shared instructions and example.
 

@@ -19,16 +19,20 @@ including referenced model definitions. Map pages, measures, relationships, slic
 record missing definitions and unsupported interactions before claiming equivalence.
 
 For live checks, use only a Databricks CLI profile and warehouse explicitly chosen by the user. An existing
-Genie MCP connection can supply data context and query results through its exposed tools; do not assume its
-tool names or select a different identity. If access is unavailable, continue the work that can be checked
+Databricks Genie One MCP connection can supply data context and query results through its exposed tools;
+do not assume its tool names or select a different identity. If access is unavailable, continue the work that can be checked
 offline, identify the missing schema or metric definitions, and report the remaining live checks.
 
 ## 2. Discover the data and definitions
 
-When Genie MCP is connected, use the available discovery and question-answering tools to identify approved
-tables or metric views, dimensions, measures, units, date coverage and business definitions. Treat returned SQL
+When Databricks Genie One MCP is connected, use the available discovery and question-answering tools to identify
+approved tables or metric views, dimensions, measures, units, date coverage and business definitions. Treat returned SQL
 as a candidate to inspect and validate, not a guarantee of correct totals or joins. Reuse existing governed
 metrics when available so the dashboard and Genie agree.
+
+Databricks Genie One MCP is the authoring-time connection for cross-data discovery, business questions and SQL
+generation. It is separate from the per-dashboard Genie agent behind the optional Ask Genie bar; configuring
+that runtime integration is described in [AUTHORING.md](AUTHORING.md#ask-genie-optional).
 
 Keep a short record of the source names, definitions and checks in the dashboard README. Do not put tokens,
 people's data or private query results in the repository. Missing catalogs, libraries or navigation sections
