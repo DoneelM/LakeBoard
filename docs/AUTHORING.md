@@ -4,6 +4,10 @@ This is the contract every dashboard follows, whoever or whatever writes it (a p
 Cursor or another tool). If the checks in step 5 pass, the portal can host it. The worked example throughout is
 [`src/dashboards/city-trips/`](../src/dashboards/city-trips/), which reads the built-in `samples.nyctaxi.trips` table.
 
+For the shared agent workflow, start with [DASHBOARD_WORKFLOW.md](DASHBOARD_WORKFLOW.md). Business authors
+using a coding agent and Genie MCP can start with [BUSINESS_AUTHORS.md](BUSINESS_AUTHORS.md). This document
+defines the hosting contract; it does not depend on the agent's own preview environment.
+
 A dashboard is one folder. Nothing outside the folder changes.
 
 ```
@@ -186,14 +190,22 @@ says what it shows and how its numbers were checked; see `src/dashboards/city-tr
 Branch from `main`, then follow [PROMOTION.md](PROMOTION.md). Reviewers check the SQL (cost, grain, tables),
 the access settings, and the reconciliation.
 
-## Prototyping as a Claude artifact
+## Prototyping in another tool
 
-A Claude Dashboard artifact provides `dash.data` / `dash.onData`, so the data side of a prototype carries over:
-the uploaded files become `sql/*.sql` datasets with the same ids. The artifact does not provide `kit`, the portal's
-theme variables or the shell. So:
+The preferred route is to generate the dashboard directly in the repository against the `dash` and `kit` APIs
+above, then preview it in the local portal. Any coding agent with the required file and command tools can follow
+the same workflow. An agent-specific artifact or preview is optional.
 
-- A prototype that uses only `dash`, its own HTML and CSS, and `d3` moves into `index.html` unchanged.
-- A prototype that uses `kit` only works in the artifact if the contents of `src/static/kit.js`, `src/static/kit.css`
-  and the theme block at the top of `src/static/shell.css` are pasted into it. Delete those copies when you move
-  it into the folder: the portal loads its own. Nothing does this step for you.
-- Check every `dash` call against the table above. The portal implements only those.
+To adapt an existing prototype:
+
+- Replace uploaded-file or mock-data access with declared datasets in `dashboard.yml`, read-only `sql/*.sql`
+  files and `dash.data('<id>')`. Match the returned columns and handle strings and nulls.
+- Replace preview-only components and external libraries with `kit` or approved bundled libraries. The hosted
+  page is HTML, CSS and JavaScript; it has no React/JSX compilation or agent-provided APIs.
+- Use the portal's theme and shell. Remove copies of `dash.js`, `kit.js`, `kit.css`, vendor libraries and shell
+  styles that were included just to make an isolated preview work.
+- Check every `dash` and `kit` call against this reference, and verify the final page in the portal. A successful
+  preview in another product does not prove hosting compatibility.
+
+Claude Dashboard artifacts were the original prototype source and may expose compatible `dash` calls. They
+still need the same checks and adaptation; they are not required to create or host a LakeBoard dashboard.
