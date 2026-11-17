@@ -1,0 +1,44 @@
+title: Travel Marketplace
+description: Bookings, revenue, cancellations and seasonality across 42 destinations of a sample holiday-rental marketplace, on a world map with a drill-down to each property.
+owner: Samples
+section: Travel
+order: 10
+groups: []            # everyone who can open the portal; this is public sample data
+libs: [leaflet]       # the destination and property map
+params:
+  destination_id: {type: BIGINT}   # optional; picked in the filter, on the map or in the table. Blank = every destination
+  property_type:  {type: STRING}   # optional; blank = every property type
+# samples.wanderbricks is Databricks sample data that every user can read, with no row-level security, so one cached
+# result per filter value is shared by all viewers. It never changes, so the TTLs are long.
+datasets:
+  destinations:
+    title: Destinations
+    description: One row per destination with its centre point, properties, bookings, revenue, cancellation rate and rating.
+    sql: sql/destinations.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample data (samples.wanderbricks), a fixed snapshot of bookings from 2023 to July 2025."
+  monthly:
+    title: Bookings by month
+    description: Bookings, revenue and cancellations per check-in month, from June 2023.
+    sql: sql/monthly.sql
+    cache: shared
+    cache_ttl: 24h
+  seasonality:
+    title: Seasonality by property type
+    description: Bookings per property type and check-in month of the year.
+    sql: sql/seasonality.sql
+    cache: shared
+    cache_ttl: 24h
+  status:
+    title: Booking status
+    description: Bookings and value per booking status.
+    sql: sql/status.sql
+    cache: shared
+    cache_ttl: 24h
+  properties:
+    title: Properties in the destination
+    description: Every property in the picked destination, with its bookings, revenue and rating. Loaded only when a destination is picked.
+    sql: sql/properties.sql
+    cache: shared
+    cache_ttl: 24h

@@ -33,7 +33,8 @@ synced from your identity provider).
 
 ### The sample dashboards
 
-City Trips, Sales & Margin and Bakery Franchises read the built-in `samples` catalog, which every user in the
+The sample dashboards (City Trips, Sales & Margin, Bakery Franchises, Travel Marketplace, Guest Experience,
+Omnichannel Retail and World Weather) read the built-in `samples` catalog, which every user in the
 workspace can usually read. They have `groups: []`, so everyone who can open the portal sees them. Delete their
 folders when you add your own, or keep them out of prod with `environments: [dev]`.
 

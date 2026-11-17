@@ -1,0 +1,210 @@
+<style>
+/* Own classes and ids start with ww- so they can't clash with the shell. Colours come from the theme variables. */
+.ww-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.ww-bar > div { flex: 1 1 auto; }
+.ww-row { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+.ww-row > * { min-width: 0; }
+.ww-map { height: 400px; }
+.ww-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+.ww-scale { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--color-fg-muted); }
+.ww-scale span:nth-child(2) { flex: 0 1 180px; height: 8px; border-radius: 4px; }
+.ww-chart text { fill: var(--color-fg-muted); font-size: 11px; }
+.ww-chart .domain { display: none; }
+.ww-chart .tick line { stroke: var(--cds-chart-grid); }
+.ww-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; font-size: 12px; color: var(--color-fg-muted); }
+.ww-legend i { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; border-radius: 2px; }
+.ww-hint { color: var(--color-fg-muted); font-size: 13px; margin: 0; }
+@media (max-width: 1000px) { .ww-row { grid-template-columns: 1fr; } .ww-map { height: 300px; } }
+</style>
+
+<div class="kit-page">
+  <h1>World Weather</h1>
+  <p class="kit-sub">Observed weather from 27 June to 12 July 2024 and a 15-day forecast for 50 world cities, from the AccuWeather data in Databricks <code>samples.accuweather</code>. Metric units. Pick a city on the map, in the filter or in the table.</p>
+
+  <div class="ww-bar">
+    <div id="ww-filters"></div>
+  </div>
+
+  <div id="ww-tiles" data-source="daily"></div>
+
+  <div class="ww-row">
+    <section class="kit-card" aria-labelledby="ww-map-h">
+      <h2 id="ww-map-h">Average temperature, observed days</h2>
+      <div id="ww-map" class="ww-map" data-source="cities"></div>
+      <div class="ww-scale" aria-hidden="true"><span id="ww-lo"></span><span id="ww-ramp"></span><span id="ww-hi"></span></div>
+    </section>
+    <section class="kit-card" aria-labelledby="ww-days-h">
+      <h2 id="ww-days-h">Day by day</h2>
+      <div id="ww-days" data-source="daily"></div>
+      <div class="ww-legend" aria-hidden="true" id="ww-days-legend"></div>
+      <p class="ww-note" id="ww-days-note"></p>
+    </section>
+  </div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="cities"><h2>Hottest cities</h2><div id="ww-hot"></div><p class="ww-note">Average temperature over the observed days.</p></section>
+    <section class="kit-card" data-source="cities"><h2>Wettest cities</h2><div id="ww-wet"></div><p class="ww-note">Total precipitation over the observed days.</p></section>
+    <section class="kit-card" data-source="cities"><h2>Sunniest cities</h2><div id="ww-sun"></div><p class="ww-note">Hours of sunshine over the observed days.</p></section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px">
+    <h2>All cities</h2>
+    <div id="ww-table" data-source="cities"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const { fmt, h, num } = kit;
+  const css = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  const deg = (v) => (num(v) === null ? '–' : `${fmt.num(v, 1)} °C`);
+  const mm = (v) => (num(v) === null ? '–' : `${fmt.num(v, 1)} mm`);
+  const hrs = (v) => (num(v) === null ? '–' : `${fmt.num(v, 0)} h`);
+  const drawn = {};
+  const changed = (name, ...deps) => {
+    const key = deps.map((d) => (d && typeof d === 'object' && 'status' in d ? [d.status, d.data] : [d]));
+    const prev = drawn[name];
+    const same = prev && prev.length === key.length && prev.every((p, i) => p.length === key[i].length && p.every((x, j) => x === key[i][j]));
+    drawn[name] = key;
+    return !same;
+  };
+
+  // Temperature colours: cold (sky) through a neutral slate to warm (amber) and hot (red), from the chart palette.
+  // The slate stop keeps mild cities from mixing blue and amber into olive.
+  const ramp = () => d3.scaleLinear().domain([5, 16, 26, 38])
+    .range([css('--chart-2', '#0EA5E9'), css('--chart-3', '#94A3B8'), css('--chart-4', '#F59E0B'), css('--chart-7', '#EF4444')]).clamp(true);
+  const ramp0 = ramp();
+  document.getElementById('ww-ramp').style.background = `linear-gradient(90deg, ${[5, 10, 16, 21, 26, 32, 38].map((t) => ramp0(t)).join(',')})`;
+  document.getElementById('ww-lo').textContent = '5 °C or less';
+  document.getElementById('ww-hi').textContent = '38 °C or more';
+
+  /* ---- City filter (sent to SQL) ---- */
+  const bar = kit.filters('#ww-filters', [{ id: 'city', label: 'City', type: 'select', all: false, value: dash.params().city }], (v) => pick(v.city));
+  function pick(city) {
+    if (!city) return;
+    bar.set('city', city);
+    dash.setParams({ city });
+    drawn.map = null;
+  }
+
+  /* ---- Map ---- */
+  const kmap = kit.map('#ww-map', { dark: matchMedia('(prefers-color-scheme: dark)').matches, radius: 8,
+    tooltip: (p) => `${p.name}, ${p.country}: ${deg(p.temp)} average, ${mm(p.rain)} of rain`, onClick: (p) => pick(p.city) });
+
+  /* ---- Day-by-day chart (d3): min-max band, average line, rain bars, forecast shaded ---- */
+  function drawDays(rows) {
+    const el = document.getElementById('ww-days');
+    if (!rows.length) { el.replaceChildren(h('p', { class: 'ww-hint' }, 'No weather for this city.')); return; }
+    const W = Math.max(320, el.clientWidth || 640), H = 300, m = { t: 12, r: 40, b: 26, l: 40 };
+    const parse = (v) => new Date(String(v).slice(0, 10) + 'T12:00:00');
+    const xs = rows.map((r) => parse(r.date));
+    const x = d3.scaleTime().domain(d3.extent(xs)).range([m.l, W - m.r]);
+    const lo = d3.min(rows, (r) => num(r.temp_min)), hi = d3.max(rows, (r) => num(r.temp_max));
+    const y = d3.scaleLinear().domain([Math.floor(Math.min(0, lo) / 5) * 5, Math.ceil(hi / 5) * 5]).range([H - m.b, m.t]);
+    const rainMax = Math.max(5, d3.max(rows, (r) => num(r.rain_mm) || 0));
+    const yr = d3.scaleLinear().domain([0, rainMax * 2.5]).range([H - m.b, m.t]);  // bars use the bottom ~40%
+    const step = (W - m.l - m.r) / Math.max(1, rows.length - 1);
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart ww-chart').attr('role', 'img')
+      .attr('aria-label', `Daily temperature range and precipitation, observed then forecast`);
+    const firstFc = rows.find((r) => r.kind === 'forecast');
+    if (firstFc) {
+      const fx = x(parse(firstFc.date)) - step / 2;
+      svg.append('rect').attr('x', fx).attr('y', m.t).attr('width', W - m.r - fx + step / 2).attr('height', H - m.b - m.t).attr('fill', css('--cds-chart-grid', '#E2E8F0')).attr('opacity', 0.55);
+      svg.append('text').attr('x', fx + 6).attr('y', m.t + 12).text('Forecast');
+    }
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(6).tickFormat((v) => `${v}°`).tickSize(-(W - m.l - m.r)));
+    svg.append('g').attr('transform', `translate(${W - m.r},0)`).call(d3.axisRight(yr).ticks(3).tickFormat((v) => (v <= rainMax ? `${v}mm` : '')).tickSize(0));
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.min(8, Math.floor(W / 80))).tickFormat((d) => d.toLocaleDateString(window.PORTAL && window.PORTAL.locale, { day: 'numeric', month: 'short' })).tickSize(0)).selectAll('text').attr('dy', '1em');
+    const rainC = css('--chart-2', '#0EA5E9'), bandC = css('--chart-4', '#F59E0B'), lineC = css('--chart-7', '#EF4444');
+    svg.append('g').selectAll('rect').data(rows).join('rect')
+      .attr('x', (r) => x(parse(r.date)) - Math.min(10, step * 0.3)).attr('width', Math.min(20, step * 0.6))
+      .attr('y', (r) => yr(num(r.rain_mm) || 0)).attr('height', (r) => H - m.b - yr(num(r.rain_mm) || 0)).attr('fill', rainC).attr('opacity', 0.75)
+      .append('title').text((r) => `${fmt.date(r.date)}: ${mm(r.rain_mm)}${r.rain_chance !== null ? `, ${fmt.num(r.rain_chance)}% chance` : ''}`);
+    svg.append('path').attr('fill', bandC).attr('opacity', 0.28)
+      .attr('d', d3.area().x((r) => x(parse(r.date))).y0((r) => y(num(r.temp_min))).y1((r) => y(num(r.temp_max))).curve(d3.curveMonotoneX)(rows));
+    svg.append('path').attr('fill', 'none').attr('stroke', lineC).attr('stroke-width', 2.2)
+      .attr('d', d3.line().x((r) => x(parse(r.date))).y((r) => y(num(r.temp_avg))).curve(d3.curveMonotoneX)(rows));
+    svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', (r) => x(parse(r.date))).attr('cy', (r) => y(num(r.temp_avg))).attr('r', 7).attr('fill', 'transparent')
+      .append('title').text((r) => `${fmt.date(r.date)} (${r.kind}): ${deg(r.temp_min)} to ${deg(r.temp_max)}, average ${deg(r.temp_avg)}`);
+    el.replaceChildren(svg.node());
+    document.getElementById('ww-days-legend').replaceChildren(
+      h('span', null, h('i', { style: `background:${bandC};opacity:.45` }), 'Daily low to high'),
+      h('span', null, h('i', { style: `background:${lineC};height:3px;vertical-align:3px` }), 'Daily average'),
+      h('span', null, h('i', { style: `background:${rainC}` }), 'Precipitation'));
+  }
+
+  function draw() {
+    const cities = dash.data('cities');
+    const daily = dash.data('daily');
+    const city = dash.params().city;
+    const row = cities.status === 'ok' ? cities.data.find((r) => r.city === city) : null;
+
+    if (cities.status === 'ok' && changed('options', cities)) {
+      bar.options('city', cities.data.slice().sort((a, b) => a.name.localeCompare(b.name)).map((r) => ({ value: r.city, label: `${r.name} (${r.country_code})` })));
+      bar.set('city', city);
+    }
+
+    if (changed('map', cities) && cities.status === 'ok' && kmap) {
+      kmap.set(cities.data.map((r) => ({ lat: num(r.lat), lon: num(r.lon), color: ramp0(num(r.temp_avg)), city: r.city, name: r.name, country: r.country_code, temp: r.temp_avg, rain: r.rain_mm }))
+        .filter((p) => p.lat !== null && p.lon !== null), { fit: false });
+      kmap.map.setView([22, 10], window.innerWidth < 700 ? 0 : 1);
+    }
+
+    const name = row ? `${row.name} (${row.country_code})` : city;
+    document.getElementById('ww-days-h').textContent = `Day by day in ${name}`;
+    if (changed('tiles', daily, cities) && kit.ready('#ww-tiles', daily)) {
+      const obs = daily.data.filter((r) => r.kind === 'observed'), fc = daily.data.filter((r) => r.kind === 'forecast');
+      const hot = obs.reduce((a, r) => (!a || num(r.temp_max) > num(a.temp_max) ? r : a), null);
+      const cold = obs.reduce((a, r) => (!a || num(r.temp_min) < num(a.temp_min) ? r : a), null);
+      const sum = (rows, k) => rows.reduce((a, r) => a + (num(r[k]) || 0), 0);
+      const avg = (rows, k) => (rows.length ? sum(rows, k) / rows.length : null);
+      const fcAvg = avg(fc, 'temp_avg'), obsAvg = avg(obs, 'temp_avg');
+      kit.tiles('#ww-tiles', [
+        { label: `${row ? row.name : city}: average`, value: deg(obsAvg), note: `${fmt.num(obs.length)} observed days` },
+        { label: 'Hottest day', value: deg(hot && hot.temp_max), note: hot ? fmt.date(hot.date) : '' },
+        { label: 'Coldest night', value: deg(cold && cold.temp_min), note: cold ? fmt.date(cold.date) : '' },
+        { label: 'Precipitation', value: mm(sum(obs, 'rain_mm')), note: `${fmt.num(obs.filter((r) => (num(r.rain_mm) || 0) > 0).length)} wet days` },
+        { label: 'Sunshine', value: hrs(sum(obs, 'sun_hours')), note: `UV up to ${fmt.num(d3.max(obs, (r) => num(r.uv_max)), 1)}` },
+        { label: 'Next 15 days', value: deg(fcAvg), note: fcAvg !== null && obsAvg !== null ? `${fcAvg >= obsAvg ? '▲' : '▼'} ${fmt.num(Math.abs(fcAvg - obsAvg), 1)} °C vs observed` : 'No forecast',
+          tone: fcAvg !== null && obsAvg !== null && Math.abs(fcAvg - obsAvg) >= 3 ? 'warn' : null },
+      ]);
+    }
+
+    if (changed('days', daily) && kit.ready('#ww-days', daily)) {
+      drawDays(daily.data);
+      const fc = daily.data.filter((r) => r.kind === 'forecast');
+      const wet = fc.filter((r) => (num(r.rain_chance) || 0) >= 50);
+      document.getElementById('ww-days-note').textContent = fc.length
+        ? `Forecast from ${fmt.date(fc[0].date)}: ${wet.length ? `${fmt.num(wet.length)} days with a 50% or higher chance of rain` : 'no day with a 50% chance of rain'}. Hover a day for details.`
+        : 'No forecast for this city.';
+    }
+
+    if (changed('ranks', cities) && kit.ready('#ww-hot', cities) && kit.ready('#ww-wet', cities) && kit.ready('#ww-sun', cities)) {
+      kit.bars('#ww-hot', { rows: cities.data, label: 'name', value: 'temp_avg', fmt: deg, max: 8, color: (r) => ramp0(num(r.temp_avg)) });
+      kit.bars('#ww-wet', { rows: cities.data, label: 'name', value: 'rain_mm', fmt: mm, max: 8, color: () => 'var(--chart-2)' });
+      kit.bars('#ww-sun', { rows: cities.data, label: 'name', value: 'sun_hours', fmt: hrs, max: 8, color: () => 'var(--chart-4)' });
+    }
+
+    if (changed('table', cities) && kit.ready('#ww-table', cities)) {
+      kit.table('#ww-table', {
+        rows: cities.data, sort: { key: 'temp_avg', dir: 'desc' }, csv: 'world-weather-cities', onRow: (r) => { pick(r.city); scrollTo({ top: 0, behavior: 'smooth' }); },
+        columns: [
+          { key: 'name', label: 'City' },
+          { key: 'country_code', label: 'Country' },
+          { key: 'temp_avg', label: 'Average', align: 'right', fmt: deg },
+          { key: 'temp_max', label: 'High', align: 'right', fmt: deg },
+          { key: 'temp_min', label: 'Low', align: 'right', fmt: deg },
+          { key: 'rain_mm', label: 'Precipitation', align: 'right', fmt: mm },
+          { key: 'sun_hours', label: 'Sunshine', align: 'right', fmt: hrs },
+          { key: 'uv_max', label: 'Peak UV', align: 'right', fmt: (v) => fmt.num(v, 1) },
+          { key: 'fc_temp_avg', label: 'Forecast average', align: 'right', fmt: deg },
+        ],
+      });
+    }
+  }
+
+  if (dash.genieContext) dash.genieContext(() => ({ City: dash.params().city }));
+  dash.onData(draw);
+  addEventListener('resize', () => { drawn.days = null; draw(); });
+})();
+</script>

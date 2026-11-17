@@ -1,0 +1,36 @@
+title: Omnichannel Retail
+description: Five years of a retailer's store, catalog and web sales, with the holiday peak, when each channel sells, categories, returns and the top customer states.
+owner: Samples
+section: Retail
+order: 10
+groups: []            # everyone who can open the portal; this is public sample data
+params:
+  year: {type: INT, default: "2002"}   # 1998 to 2002; the year before is shown for comparison
+# samples.tpcds_sf1 is the TPC-DS benchmark data (scale factor 1) that every user can read, with no row-level security,
+# so one cached result per year is shared by all viewers. It never changes.
+datasets:
+  monthly:
+    title: Sales by month and channel
+    description: Sales and orders per channel and month, for the chosen year and the year before.
+    sql: sql/monthly.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "TPC-DS benchmark data in samples.tpcds_sf1: generated sales from January 1998 to January 2003."
+  hours:
+    title: Sales by hour and channel
+    description: Line items sold per channel and hour of the day, for the chosen year.
+    sql: sql/hours.sql
+    cache: shared
+    cache_ttl: 24h
+  categories:
+    title: Categories
+    description: Sales and returns per channel and item category, for the chosen year.
+    sql: sql/categories.sql
+    cache: shared
+    cache_ttl: 24h
+  states:
+    title: Customer states
+    description: Sales per channel and the customer's billing state, for the chosen year.
+    sql: sql/states.sql
+    cache: shared
+    cache_ttl: 24h
