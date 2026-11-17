@@ -12,6 +12,28 @@ answers questions with the viewer's own access.
 
 ![City Trips, one of the sample dashboards: KPI tiles, trips per day, a day-by-hour heatmap and the busiest ZIP codes](docs/images/city-trips.png)
 
+## From Power BI to LakeBoard
+
+For Power BI migrations, the intended end-to-end architecture shares reviewed business metrics between
+dashboards and natural-language analytics:
+
+```mermaid
+flowchart TD
+    P[Power BI project in Git] --> A[Agent-assisted migration]
+    A --> M[Reviewed Unity Catalog metric views]
+    A --> D[LakeBoard dashboard folders]
+    M --> D
+    M --> G[Curated Genie Agents]
+    D --> L[One LakeBoard app per environment]
+    G --> L
+```
+
+Metric views and Genie Agents are reviewed and provisioned separately. LakeBoard currently scaffolds and
+validates dashboard folders and connects them to existing Genie Agents; automatic semantic-model conversion
+and provisioning are not included in this repository. Follow the [migration guide](docs/MIGRATION.md) to map
+and reconcile an existing report. New dashboards can start directly from approved Databricks data using the
+[shared authoring workflow](docs/DASHBOARD_WORKFLOW.md).
+
 ## Quickstart (about 10 minutes)
 
 This runs the seven sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
