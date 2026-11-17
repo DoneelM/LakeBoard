@@ -10,9 +10,11 @@ documented contract. Queries run as the person viewing the page, so Unity Catalo
 masks apply as they are. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that
 answers questions with the viewer's own access.
 
+![City Trips, one of the sample dashboards: KPI tiles, trips per day, a day-by-hour heatmap and the busiest ZIP codes](docs/images/city-trips.png)
+
 ## Quickstart (about 10 minutes)
 
-This runs the three sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
+This runs the seven sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
 Unity Catalog workspaces (an admin can hide it). [Databricks Free Edition](https://www.databricks.com/learn/free-edition)
 works well: it has a serverless starter warehouse, Databricks Apps and the `samples` catalog.
 
@@ -21,6 +23,21 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
 | [City Trips](src/dashboards/city-trips/) | `samples.nyctaxi` | Taxi trips by day and hour, busy ZIP codes, fares by distance |
 | [Sales & Margin](src/dashboards/sales-margin/) | `samples.tpch` | Revenue, discount and margin, year on year |
 | [Bakery Franchises](src/dashboards/bakery-franchises/) | `samples.bakehouse` | Franchise sales, products and reviews, on a map |
+| [Travel Marketplace](src/dashboards/travel-marketplace/) | `samples.wanderbricks` | Bookings, revenue and seasonality across 42 destinations, drilling down to each property on a map |
+| [Guest Experience](src/dashboards/guest-experience/) | `samples.wanderbricks` | Reviews and support chats: ratings, topics, how the guest's mood changes, agents |
+| [Omnichannel Retail](src/dashboards/omnichannel-retail/) | `samples.tpcds_sf1` | Store, catalog and web sales year on year, the holiday peak, hours, returns |
+| [World Weather](src/dashboards/world-weather/) | `samples.accuweather` | Observed weather and a 15-day forecast for 50 cities, on a temperature map |
+
+<p>
+  <img src="docs/images/sales-margin.png" width="49%" alt="Sales &amp; Margin: revenue, discount and margin KPIs against the year before, a monthly trend and a region table">
+  <img src="docs/images/bakery-franchises.png" width="49%" alt="Bakery Franchises: sales KPIs and a world map of franchises sized by revenue">
+</p>
+<p>
+  <img src="docs/images/travel-marketplace.png" width="49%" alt="Travel Marketplace: booking KPIs, a world map of destinations sized by revenue and the top destinations">
+  <img src="docs/images/guest-experience.png" width="49%" alt="Guest Experience: review and support-chat KPIs, reviews per month and the star distribution">
+  <img src="docs/images/omnichannel-retail.png" width="49%" alt="Omnichannel Retail: sales KPIs against the year before, monthly sales by channel and the channel mix">
+  <img src="docs/images/world-weather.png" width="49%" alt="World Weather: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
+</p>
 
 **1. Sign in with the Databricks CLI** (a recent version; `databricks --version`):
 
@@ -49,6 +66,19 @@ databricks bundle run portal -t dev -p <cli-profile>
 
 The second command prints the app URL. Stop the app when you are done (`databricks apps stop lakeboard-dev
 -p <cli-profile>`) so it doesn't use compute.
+
+**Keep your workspace out of git** (optional, handy for a public fork): leave the placeholders and put your values in
+two gitignored files instead. `databricks.local.yml` overrides the target:
+
+```yaml
+targets:
+  dev:
+    workspace: {host: https://<your-workspace-host>}
+    variables: {warehouse_id: "<warehouse-id>", viewers_group: users}
+```
+
+and `src/environments.local.yml` sets the host the app uses to know it is dev:
+`environments: {dev: {host: <your-workspace-host>}}` (no https://).
 
 **4. Add your own dashboard:**
 

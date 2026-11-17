@@ -156,10 +156,12 @@
     const y = d3.scaleLinear().domain([Math.min(0, d3.min(all) || 0), d3.max(all) || 1]).nice().range([H - m.b, m.t]);
     const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart').attr('role', 'img').attr('aria-label', opts.label || 'Line chart');
     // One date label per ~64px, written in the portal's locale, so the labels never run together.
-    const ticks = Math.max(2, Math.min(xs.length, Math.floor((W - m.l - m.r) / 64)));
+    // Space labels by the months covered, not the row count: a series with missing months spans more than its rows.
+    const months = monthly ? d3.timeMonth.count(...d3.extent(xs)) + 1 : xs.length;
+    const ticks = Math.max(2, Math.min(months, Math.floor((W - m.l - m.r) / 64)));
     const tickFmt = (d) => d.toLocaleDateString(LOCALE, monthly ? { month: 'short', year: '2-digit' } : { day: 'numeric', month: 'short' });
     const days = Math.max(1, Math.ceil((x.domain()[1] - x.domain()[0]) / 864e5 / ticks));  // days between labels
-    const every = monthly ? d3.timeMonth.every(Math.max(1, Math.ceil(xs.length / ticks)))
+    const every = monthly ? d3.timeMonth.every(Math.max(1, Math.ceil(months / ticks)))
       : days <= 1 ? d3.timeDay : days <= 2 ? d3.timeDay.every(2) : days <= 8 ? d3.timeMonday
         : days <= 20 ? d3.timeMonday.every(2) : d3.timeMonth.every(Math.ceil(days / 30));
     svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(every).tickFormat(tickFmt).tickSizeOuter(0));

@@ -55,4 +55,5 @@ this repository.
 | [0005](0005-stop-apps-after-deploy-and-at-6pm.md) | Dev and test apps stopped after every deploy; prod stopped in the evening | Accepted |
 | [0006](0006-ask-genie-as-the-viewer.md) | Ask Genie: as the viewer, one Genie space per dashboard | Accepted |
 | [0009](0009-data-freshness-label.md) | Data freshness label | Accepted |
+| [0010](0010-local-overrides-for-workspace-details.md) | Workspace details in gitignored local files | Accepted |
 | [0011](0011-agent-independent-dashboard-authoring.md) | Agent-independent dashboard authoring | In progress |

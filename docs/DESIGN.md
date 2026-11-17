@@ -255,7 +255,8 @@ Two example pipelines do the same thing; use whichever matches your git host.
   stopped afterwards. Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a
   `DATABRICKS_HOST` variable and a service principal's OAuth secret (`DATABRICKS_CLIENT_ID`,
-  `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. A `concurrency` group per environment.
+  `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. A `concurrency` group per environment. An environment
+  with no `DATABRICKS_HOST` skips its deploy with a notice, so a fresh fork's pushes don't fail.
 - **Azure DevOps** (`azure-pipelines.yml`): the `databricks-service-connection` service connection (a placeholder);
   hosts come from the `lakeboard-<env>-vars` variable groups. `lockBehavior: sequential` per stage.
 - **Apps:** `lakeboard` (prod), `lakeboard-test`, `lakeboard-dev`.

@@ -1,0 +1,273 @@
+<style>
+/* Own classes and ids start with gx- so they can't clash with the shell. Colours come from the theme variables. */
+.gx-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.gx-bar > div { flex: 1 1 auto; }
+.gx-h { margin: 22px 0 8px; font-size: 16px; font-weight: 800; }
+.gx-h small { font-weight: 400; font-size: 13px; color: var(--color-fg-muted); margin-left: 6px; }
+.gx-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+.gx-hint { color: var(--color-fg-muted); font-size: 13px; margin: 0; }
+.gx-flow text { fill: var(--color-fg-muted); font-size: 12px; }
+.gx-flow .gx-n { fill: var(--color-fg); font-weight: 700; font-size: 14px; }
+.gx-quote { font-style: italic; }
+</style>
+
+<div class="kit-page">
+  <h1>Guest Experience</h1>
+  <p class="kit-sub">What guests of a sample holiday-rental marketplace say, from 100,000 reviews and 1,900 support chats in Databricks <code>samples.wanderbricks</code>. The destination filter applies to reviews; support chats aren't linked to a property.</p>
+
+  <div class="gx-bar">
+    <div id="gx-filters"></div>
+    <button type="button" class="kit-btn" id="gx-reset">Reset</button>
+  </div>
+
+  <div id="gx-tiles" data-source="stars"></div>
+
+  <h2 class="gx-h">Reviews <small id="gx-scope">All destinations</small></h2>
+  <div class="kit-grid">
+    <section class="kit-card" data-source="monthly">
+      <h2>Reviews per month</h2>
+      <div id="gx-trend"></div>
+      <p class="gx-note" id="gx-trend-note"></p>
+    </section>
+    <section class="kit-card" data-source="stars">
+      <h2>How guests rate their stay</h2>
+      <div id="gx-stars"></div>
+      <p class="gx-note">Reviews per whole star; a rating of 3.7 counts as 3 stars.</p>
+    </section>
+  </div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="destinations">
+      <h2>Best-rated destinations</h2>
+      <div id="gx-best"></div>
+    </section>
+    <section class="kit-card" data-source="destinations">
+      <h2>Most low ratings</h2>
+      <div id="gx-worst"></div>
+      <p class="gx-note">Share of reviews under 2.5 stars.</p>
+    </section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px" data-source="comments">
+    <h2>What guests say most</h2>
+    <div id="gx-comments"></div>
+  </section>
+
+  <h2 class="gx-h">Support chats <small>All destinations</small></h2>
+  <div class="kit-grid">
+    <section class="kit-card" data-source="tickets">
+      <h2>Why guests get in touch</h2>
+      <div id="gx-topics"></div>
+      <p class="gx-note">Topic from keywords in the guest's first message. Bar: chats; colour: share that ended with the guest still upset.</p>
+    </section>
+    <section class="kit-card" data-source="tickets">
+      <h2>How the guest's mood changes</h2>
+      <div id="gx-flow"></div>
+      <p class="gx-note" id="gx-flow-note"></p>
+    </section>
+  </div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="tones">
+      <h2>Guests sound…</h2>
+      <div id="gx-tone-user"></div>
+    </section>
+    <section class="kit-card" data-source="tones">
+      <h2>Agents sound…</h2>
+      <div id="gx-tone-agent"></div>
+    </section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px" data-source="tickets">
+    <h2>Support agents</h2>
+    <div id="gx-agents"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const { fmt, h, num } = kit;
+  const css = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  const MOODS = ['negative', 'neutral', 'positive'];
+  const moodColour = { negative: 'var(--signal-bad)', neutral: 'var(--chart-3)', positive: 'var(--signal-ok)' };
+  const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+  const drawn = {};
+  const changed = (name, ...deps) => {
+    const key = deps.map((d) => (d && typeof d === 'object' && 'status' in d ? [d.status, d.data] : [d]));
+    const prev = drawn[name];
+    const same = prev && prev.length === key.length && prev.every((p, i) => p.length === key[i].length && p.every((x, j) => x === key[i][j]));
+    drawn[name] = key;
+    return !same;
+  };
+  const empty = (sel, text) => document.querySelector(sel).replaceChildren(h('p', { class: 'gx-hint' }, text));
+  const count = (rows, fn) => rows.reduce((a, r) => a + (fn(r) ? 1 : 0), 0);
+
+  /* ---- Destination filter (sent to the review queries) ---- */
+  const bar = kit.filters('#gx-filters', [{ id: 'destination_id', label: 'Destination', type: 'select', all: 'All destinations', value: dash.params().destination_id || '' }],
+    (v) => dash.setParams({ destination_id: v.destination_id || null }));
+  document.getElementById('gx-reset').addEventListener('click', () => { bar.set('destination_id', ''); dash.setParams({ destination_id: null }); });
+
+  /* ---- Mood flow (d3): guest's first mood on the left, last mood on the right, ribbons sized by chats ---- */
+  function drawFlow(rows) {
+    const el = document.getElementById('gx-flow');
+    if (!rows.length) { empty('#gx-flow', 'No chats.'); return; }
+    const W = Math.max(320, el.clientWidth || 520), H = 250, nodeW = 14, gap = 14, top = 24, padL = 100, padR = 110;
+    const total = rows.length, usable = H - top - gap * 2 - 6;
+    const scale = usable / total;
+    const side = (key) => { let y = top; return Object.fromEntries(MOODS.map((m) => { const n = count(rows, (r) => r[key] === m); const s = { y, n, h: n * scale, off: 0 }; y += n * scale + gap; return [m, s]; })); };
+    const L = side('first_mood'), R = side('last_mood');
+    const x0 = padL, x1 = W - padR - nodeW;
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart gx-flow').attr('role', 'img')
+      .attr('aria-label', 'Guest mood at the start and end of support chats');
+    svg.append('text').attr('x', x0 + nodeW / 2).attr('y', 12).attr('text-anchor', 'middle').text('First message');
+    svg.append('text').attr('x', x1 + nodeW / 2).attr('y', 12).attr('text-anchor', 'middle').text('Last message');
+    for (const a of MOODS) for (const b of MOODS) {
+      const n = count(rows, (r) => r.first_mood === a && r.last_mood === b);
+      if (!n) continue;
+      const hgt = n * scale, ya = L[a].y + L[a].off + hgt / 2, yb = R[b].y + R[b].off + hgt / 2;
+      L[a].off += hgt; R[b].off += hgt;
+      const mx = (x0 + nodeW + x1) / 2;
+      svg.append('path').attr('d', `M${x0 + nodeW},${ya} C${mx},${ya} ${mx},${yb} ${x1},${yb}`).attr('fill', 'none')
+        .attr('stroke', css(b === 'negative' ? '--signal-bad' : b === 'positive' ? '--signal-ok' : '--chart-3', '#999')).attr('stroke-opacity', 0.35).attr('stroke-width', Math.max(1, hgt))
+        .append('title').text(`${cap(a)} → ${b}: ${fmt.num(n)} chats (${fmt.pct(n / total)})`);
+    }
+    for (const [x, S, anchor, dx] of [[x0, L, 'end', -8], [x1, R, 'start', nodeW + 8]]) for (const m of MOODS) {
+      const s = S[m];
+      svg.append('rect').attr('x', x).attr('y', s.y).attr('width', nodeW).attr('height', Math.max(1, s.h)).attr('rx', 2)
+        .attr('fill', css(m === 'negative' ? '--signal-bad' : m === 'positive' ? '--signal-ok' : '--chart-3', '#999'));
+      const t = svg.append('text').attr('x', x + dx).attr('y', s.y + Math.max(s.h, 12) / 2 + 4).attr('text-anchor', anchor);
+      t.append('tspan').attr('class', 'gx-n').text(fmt.pct(s.n / total, 0));
+      t.append('tspan').attr('dx', 4).text(cap(m));
+    }
+    el.replaceChildren(svg.node());
+  }
+
+  function draw() {
+    const dests = dash.data('destinations');
+    const monthly = dash.data('monthly');
+    const stars = dash.data('stars');
+    const comments = dash.data('comments');
+    const tickets = dash.data('tickets');
+    const tones = dash.data('tones');
+    const destId = dash.params().destination_id ? String(dash.params().destination_id) : null;
+    const picked = dests.status === 'ok' && destId ? dests.data.find((r) => r.destination_id === destId) : null;
+    document.getElementById('gx-scope').textContent = picked ? `${picked.destination}, ${picked.country}` : 'All destinations';
+
+    if (dests.status === 'ok' && changed('options', dests)) {
+      bar.options('destination_id', dests.data.slice().sort((a, b) => a.destination.localeCompare(b.destination)).map((r) => ({ value: r.destination_id, label: `${r.destination}, ${r.country}` })));
+    }
+
+    if (changed('tiles', stars, tickets) && kit.ready('#gx-tiles', stars, tickets)) {
+      const total = stars.data.reduce((a, r) => a + (num(r.reviews) || 0), 0);
+      const by = (fn) => stars.data.filter(fn).reduce((a, r) => a + (num(r.reviews) || 0), 0);
+      const t = tickets.data, n = t.length;
+      const calmer = count(t, (r) => MOODS.indexOf(r.last_mood) > MOODS.indexOf(r.first_mood));
+      const worse = count(t, (r) => MOODS.indexOf(r.last_mood) < MOODS.indexOf(r.first_mood));
+      kit.tiles('#gx-tiles', [
+        { label: 'Reviews', value: fmt.num(total), note: picked ? picked.destination : 'All destinations' },
+        { label: '4 stars or more', value: fmt.pct(total ? by((r) => num(r.stars) >= 4) / total : null), note: 'of reviews', tone: 'ok' },
+        { label: '1 star', value: fmt.pct(total ? by((r) => num(r.stars) <= 1) / total : null), note: 'of reviews', tone: 'bad' },
+        { label: 'Support chats', value: fmt.num(n), note: `${fmt.num(new Set(t.map((r) => r.agent)).size)} agents` },
+        { label: 'Guest calmer by the end', value: fmt.pct(n ? calmer / n : null), note: 'mood improved', tone: 'ok' },
+        { label: 'Guest more upset', value: fmt.pct(n ? worse / n : null), note: 'mood got worse', tone: n && worse / n > 0.3 ? 'bad' : 'warn' },
+      ]);
+    }
+
+    if (changed('trend', monthly) && kit.ready('#gx-trend', monthly)) {
+      if (!monthly.data.length) empty('#gx-trend', 'No reviews for this filter.');
+      else {
+        kit.line('#gx-trend', { rows: monthly.data, x: 'month', series: [{ key: 'reviews', label: 'Reviews' }], fmt: fmt.compact, label: 'Reviews per month' });
+        const rated = monthly.data.reduce((a, r) => a + (num(r.rating) || 0) * (num(r.reviews) || 0), 0);
+        const all = monthly.data.reduce((a, r) => a + (num(r.reviews) || 0), 0);
+        const lo = Math.min(...monthly.data.map((r) => num(r.rating))), hi = Math.max(...monthly.data.map((r) => num(r.rating)));
+        document.getElementById('gx-trend-note').textContent = `Average rating ${fmt.num(all ? rated / all : null, 2)} out of 5, between ${fmt.num(lo, 2)} and ${fmt.num(hi, 2)} in any month.`;
+      }
+    }
+
+    if (changed('stars', stars) && kit.ready('#gx-stars', stars)) {
+      const total = stars.data.reduce((a, r) => a + (num(r.reviews) || 0), 0);
+      const tone = { 1: 'var(--signal-bad)', 2: 'var(--signal-warn)', 3: 'var(--chart-3)', 4: 'var(--chart-5)', 5: 'var(--signal-ok)' };
+      if (!total) empty('#gx-stars', 'No reviews for this filter.');
+      else kit.bars('#gx-stars', { rows: stars.data.slice().sort((a, b) => b.stars - a.stars).map((r) => ({ label: '★'.repeat(+r.stars) + ` ${r.stars}`, share: (num(r.reviews) || 0) / total, stars: r.stars })),
+        label: 'label', value: 'share', fmt: (v) => fmt.pct(v), color: (r) => tone[r.stars] });
+      // kit.bars sorts by size; put the bars back in star order (5 to 1). Each label ends with its star count.
+      const list = document.querySelector('#gx-stars .kit-bars');
+      const starsOf = (bar) => +bar.querySelector('.kit-bar-label').textContent.slice(-1);
+      if (list) [...list.children].sort((a, b) => starsOf(b) - starsOf(a)).forEach((c) => list.append(c));
+    }
+
+    if (changed('dest', dests, destId) && kit.ready('#gx-best', dests) && kit.ready('#gx-worst', dests)) {
+      const mark = (r) => (r.destination_id === destId ? 'var(--accent)' : null);
+      kit.bars('#gx-best', { rows: dests.data, label: 'destination', value: 'rating', fmt: (v) => `${fmt.num(v, 2)} ★`, max: 8, color: (r) => mark(r) || 'var(--signal-ok)' });
+      kit.bars('#gx-worst', { rows: dests.data, label: 'destination', value: 'low_share', fmt: (v) => fmt.pct(v), max: 8, color: (r) => mark(r) || 'var(--signal-bad)' });
+    }
+
+    if (changed('comments', comments) && kit.ready('#gx-comments', comments)) {
+      const total = comments.data.reduce((a, r) => a + (num(r.reviews) || 0), 0);
+      kit.table('#gx-comments', {
+        rows: comments.data.map((r) => ({ ...r, share: total ? (num(r.reviews) || 0) / total : null, mood: num(r.rating) >= 4 ? 'Praise' : num(r.rating) < 2.5 ? 'Complaint' : 'Mixed' })),
+        sort: { key: 'reviews', dir: 'desc' }, csv: 'guest-comments', empty: 'No reviews for this filter',
+        columns: [
+          { key: 'comment', label: 'Comment', render: (r) => h('span', { class: 'gx-quote' }, `“${r.comment}”`) },
+          { key: 'mood', label: 'Kind' },
+          { key: 'reviews', label: 'Reviews', align: 'right', fmt: (v) => fmt.num(v) },
+          { key: 'share', label: 'Share', align: 'right', fmt: (v) => fmt.pct(v) },
+          { key: 'rating', label: 'Average rating', align: 'right', fmt: (v) => fmt.num(v, 1) },
+        ],
+      });
+    }
+
+    if (changed('support', tickets) && kit.ready('#gx-topics', tickets) && kit.ready('#gx-flow', tickets) && kit.ready('#gx-agents', tickets)) {
+      const t = tickets.data;
+      const topics = [...new Set(t.map((r) => r.topic))].map((topic) => {
+        const rows = t.filter((r) => r.topic === topic);
+        return { topic, chats: rows.length, upset: count(rows, (r) => r.last_mood === 'negative') / rows.length };
+      });
+      const heat = d3.scaleLinear().domain([0.5, 0.75, 1]).range([css('--signal-warn', '#F59E0B'), css('--chart-7', '#EF4444'), css('--color-bad', '#B91C1C')]).clamp(true);
+      kit.bars('#gx-topics', { rows: topics, label: 'topic', value: 'chats', fmt: (v) => fmt.num(v), max: 12, color: (r) => heat(r.upset) });
+      document.querySelectorAll('#gx-topics .kit-bar').forEach((el) => {
+        const row = topics.find((r) => r.topic === el.querySelector('.kit-bar-label').title);
+        if (row) el.querySelector('.kit-bar-value').textContent = `${fmt.num(row.chats)} · ${fmt.pct(row.upset, 0)} upset`;
+      });
+
+      drawFlow(t);
+      const n = t.length;
+      const stayNeg = count(t, (r) => r.first_mood === 'negative' && r.last_mood === 'negative');
+      const posToNeg = count(t, (r) => r.first_mood !== 'negative' && r.last_mood === 'negative');
+      document.getElementById('gx-flow-note').textContent = `${fmt.pct(stayNeg / n, 0)} of chats start and end upset, and ${fmt.pct(posToNeg / n, 0)} start calm but end upset. Hover a ribbon for counts.`;
+
+      const agents = [...new Set(t.map((r) => r.agent))].map((agent) => {
+        const rows = t.filter((r) => r.agent === agent);
+        return { agent, chats: rows.length,
+          calmer: count(rows, (r) => MOODS.indexOf(r.last_mood) > MOODS.indexOf(r.first_mood)) / rows.length,
+          upset: count(rows, (r) => r.last_mood === 'negative') / rows.length,
+          top: d3.greatest(d3.rollups(rows, (v) => v.length, (r) => r.topic), (d) => d[1])[0] };
+      });
+      kit.table('#gx-agents', {
+        rows: agents, sort: { key: 'calmer', dir: 'desc' }, csv: 'support-agents', max: 60,
+        columns: [
+          { key: 'agent', label: 'Agent' },
+          { key: 'chats', label: 'Chats', align: 'right', fmt: (v) => fmt.num(v) },
+          { key: 'calmer', label: 'Guest calmer', align: 'right', fmt: (v) => fmt.pct(v, 0) },
+          { key: 'upset', label: 'Ended upset', align: 'right', fmt: (v) => fmt.pct(v, 0) },
+          { key: 'top', label: 'Most common topic' },
+        ],
+      });
+    }
+
+    if (changed('tones', tones) && kit.ready('#gx-tone-user', tones) && kit.ready('#gx-tone-agent', tones)) {
+      const pos = new Set(['positive', 'friendly', 'optimistic', 'agreeable', 'aggreeable', 'caring', 'helpful', 'sincere', 'trying to difuse tension']);
+      const colour = (r) => (r.tone === 'neutral' ? moodColour.neutral : pos.has(r.tone) ? moodColour.positive : moodColour.negative);
+      for (const [sender, sel] of [['user', '#gx-tone-user'], ['agent', '#gx-tone-agent']]) {
+        const rows = tones.data.filter((r) => r.sender === sender);
+        const total = rows.reduce((a, r) => a + (num(r.messages) || 0), 0);
+        kit.bars(sel, { rows: rows.map((r) => ({ ...r, label: cap(r.tone), share: (num(r.messages) || 0) / total })), label: 'label', value: 'share', fmt: (v) => fmt.pct(v), max: 8, color: colour });
+      }
+    }
+  }
+
+  if (dash.genieContext) dash.genieContext(() => ({ Destination: document.getElementById('gx-scope').textContent }));
+  dash.onData(draw);
+  addEventListener('resize', () => { drawn.trend = null; drawn.support = null; draw(); });
+})();
+</script>

@@ -5,17 +5,21 @@
 #
 # Before the first deploy, replace every placeholder below: the workspace hosts, the SQL warehouse ids and the
 # group that may open the app. The hosts must match src/environments.yml.
+# Or keep the placeholders and put your values in databricks.local.yml and src/environments.local.yml (both
+# gitignored; README "Keep your workspace out of git").
 bundle:
   name: lakeboard
 
 include:
   - resources/*.yml
+  - "*.local.yml"   # optional, gitignored: databricks.local.yml overrides targets with your hosts and ids
 
 # src/sources_map.json is written by the pipeline just before deploy (scripts/build_sources_map.py) and is gitignored,
 # and the bundle leaves gitignored files out of the upload unless they are listed here.
 sync:
   include:
     - src/sources_map.json
+    - src/environments.local.yml   # optional, gitignored: your workspace hosts
 
 variables:
   app_name:
