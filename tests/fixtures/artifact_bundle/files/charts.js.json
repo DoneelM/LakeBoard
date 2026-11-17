@@ -1,0 +1,3 @@
+{
+  "text": "// Tiny SVG helpers for the bakehouse page.\nfunction bkLine(el, rows) { el.textContent = rows.length + ' days'; }\nfunction bkBars(el, rows) { el.textContent = rows.length + ' franchises'; }\n"
+}
