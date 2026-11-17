@@ -1,0 +1,321 @@
+<style>
+/* Own classes and ids start with tm- so they can't clash with the shell. Colours come from the theme variables. */
+.tm-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.tm-bar > div { flex: 1 1 auto; }
+.tm-row { display: grid; gap: 12px; margin-top: 12px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.tm-row > * { min-width: 0; }
+.tm-map { height: 440px; }
+.tm-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+.tm-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 10px; }
+.tm-head h2 { margin: 0; font-size: 14px; font-weight: 700; flex: 1; }
+.tm-heat rect { stroke: var(--color-panel); stroke-width: 2; }
+.tm-heat text { fill: var(--color-fg-muted); font-size: 11px; }
+.tm-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--color-fg-muted); }
+.tm-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.tm-hint { color: var(--color-fg-muted); font-size: 13px; margin: 0; }
+@media (max-width: 900px) { .tm-row { grid-template-columns: 1fr; } .tm-map { height: 320px; } }
+</style>
+
+<div class="kit-page">
+  <h1>Travel Marketplace</h1>
+  <p class="kit-sub">Holiday-rental bookings across 42 destinations, June 2023 to July 2025, from the Databricks <code>samples.wanderbricks</code> data. Pick a destination on the map, in the filter or in the table to see its properties.</p>
+
+  <div class="tm-bar">
+    <div id="tm-filters"></div>
+    <button type="button" class="kit-btn" id="tm-reset">Reset</button>
+  </div>
+
+  <div id="tm-tiles" data-source="destinations"></div>
+
+  <div class="tm-row">
+    <section class="kit-card" aria-labelledby="tm-map-h">
+      <div class="tm-head">
+        <h2 id="tm-map-h">Where guests stay</h2>
+        <button type="button" class="kit-btn" id="tm-back" hidden>All destinations</button>
+      </div>
+      <div id="tm-map" class="tm-map" data-source="destinations"></div>
+      <div id="tm-map-legend" class="tm-legend" aria-hidden="true"></div>
+      <p class="tm-note" id="tm-map-note">Circle area shows revenue. Click a destination to see its properties.</p>
+    </section>
+    <section class="kit-card" data-source="destinations">
+      <h2 id="tm-top-h">Top destinations by revenue</h2>
+      <div id="tm-top"></div>
+    </section>
+  </div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="monthly">
+      <h2>Revenue by check-in month</h2>
+      <div id="tm-trend"></div>
+      <p class="tm-note" id="tm-trend-note"></p>
+    </section>
+    <section class="kit-card" data-source="seasonality">
+      <h2>When each kind of stay is booked</h2>
+      <div id="tm-heat"></div>
+      <p class="tm-note">Share of each property type's bookings by check-in month. Darker means busier.</p>
+    </section>
+  </div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="status">
+      <h2>Booking status</h2>
+      <div id="tm-status"></div>
+      <p class="tm-note">Share of bookings. Revenue elsewhere on this page leaves out cancelled bookings.</p>
+    </section>
+    <section class="kit-card" data-source="destinations">
+      <h2>Cancellation rate by destination</h2>
+      <div id="tm-cancel"></div>
+    </section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px" aria-labelledby="tm-table-h">
+    <h2 id="tm-table-h">Destination league table</h2>
+    <div id="tm-table" data-source="destinations"></div>
+  </section>
+
+  <section class="kit-card" style="margin-top:12px" id="tm-props-card" hidden aria-labelledby="tm-props-h">
+    <h2 id="tm-props-h">Properties</h2>
+    <div id="tm-props" data-source="properties"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const { fmt, h, num } = kit;
+  const TYPES = ['Urban Year-Round', 'Summer Getaway', 'Historical Place', 'Ski Resort'];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const css = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  const typeColour = (t) => css(`--chart-${[1, 4, 5, 7][Math.max(0, TYPES.indexOf(t))]}`, '#6366F1');
+  const state = { dest: null };   // the destination row picked on the map, in the filter or in the table
+  const drawn = {};
+  const changed = (name, ...deps) => {
+    const key = deps.map((d) => (d && typeof d === 'object' && 'status' in d ? [d.status, d.data] : [d]));
+    const prev = drawn[name];
+    const same = prev && prev.length === key.length && prev.every((p, i) => p.length === key[i].length && p.every((x, j) => x === key[i][j]));
+    drawn[name] = key;
+    return !same;
+  };
+  const empty = (sel, text) => document.querySelector(sel).replaceChildren(h('p', { class: 'tm-hint' }, text));
+
+  /* ---- Filters (both sent to SQL) ---- */
+  const start = dash.params();
+  const bar = kit.filters('#tm-filters', [
+    { id: 'destination_id', label: 'Destination', type: 'select', all: 'All destinations', value: start.destination_id || '' },
+    { id: 'property_type', label: 'Property type', type: 'select', all: 'All types', options: TYPES, value: start.property_type || '' },
+  ], (v, id) => {
+    if (id === 'destination_id') pick(v.destination_id || null);
+    else dash.setParams({ property_type: v.property_type || null });
+  });
+  document.getElementById('tm-reset').addEventListener('click', () => {
+    bar.set('destination_id', ''); bar.set('property_type', '');
+    state.dest = null;
+    dash.setParams({ destination_id: null, property_type: null });
+    redrawAll();
+  });
+  document.getElementById('tm-back').addEventListener('click', () => pick(null));
+
+  function pick(id) {
+    state.dest = id ? String(id) : null;
+    bar.set('destination_id', state.dest || '');
+    dash.setParams({ destination_id: state.dest });
+    redrawAll();
+  }
+  const redrawAll = () => { for (const k of Object.keys(drawn)) drawn[k] = null; draw(); };
+
+  /* ---- Map: destination bubbles, or the picked destination's properties coloured by type ---- */
+  const kmap = kit.map('#tm-map', { dark: matchMedia('(prefers-color-scheme: dark)').matches });
+  const L_ = window.L;
+  const layer = kmap && L_ ? L_.featureGroup().addTo(kmap.map) : null;
+  let fitKey = null;
+  const fit = () => {
+    if (!kmap || !layer || !layer.getLayers().length) return;
+    kmap.map.invalidateSize({ animate: false });
+    const size = kmap.map.getSize();
+    if (!size.x || !size.y) return;
+    kmap.map.fitBounds(layer.getBounds().pad(0.12), { maxZoom: state.dest ? 13 : 4 });
+  };
+  if (window.ResizeObserver && kmap) new ResizeObserver(fit).observe(document.getElementById('tm-map'));
+
+  function drawDestinations(rows) {
+    if (!layer) return;
+    const colour = css('--brand', '#4F46E5');
+    const top = Math.max(1, ...rows.map((r) => num(r.revenue) || 0));
+    layer.clearLayers();
+    for (const r of rows) {
+      const lat = num(r.lat), lon = num(r.lon);
+      if (lat === null || lon === null) continue;
+      const c = L_.circleMarker([lat, lon], { radius: 5 + 22 * Math.sqrt((num(r.revenue) || 0) / top), color: colour, weight: 1, fillColor: colour, fillOpacity: 0.5 });
+      c.bindTooltip(h('div', null, h('strong', null, `${r.destination}, ${r.country}`), h('br'),
+        `${fmt.money(r.revenue)} from ${fmt.num(r.bookings)} bookings`, h('br'),
+        `${fmt.num(r.properties)} properties · rating ${fmt.num(r.rating, 2)}`), { direction: 'top' });
+      c.on('click', () => pick(r.destination_id));
+      layer.addLayer(c);
+    }
+    document.getElementById('tm-map-legend').replaceChildren();
+    document.getElementById('tm-map-note').textContent = 'Circle area shows revenue. Click a destination to see its properties.';
+    refit('all:' + rows.length);
+  }
+
+  function drawProperties(rows) {
+    if (!layer) return;
+    layer.clearLayers();
+    for (const r of rows) {
+      const lat = num(r.lat), lon = num(r.lon);
+      if (lat === null || lon === null) continue;
+      const col = typeColour(r.property_type);
+      const c = L_.circleMarker([lat, lon], { radius: 5, color: 'rgba(0,0,0,.45)', weight: 1, fillColor: col, fillOpacity: 0.85 });
+      c.bindTooltip(h('div', null, h('strong', null, r.title), h('br'), `${r.property_type} · ${fmt.num(r.bedrooms)} bedrooms · from ${fmt.money(r.base_price)} a night`, h('br'),
+        `${fmt.num(r.bookings)} bookings · ${fmt.money(r.revenue)} · rating ${fmt.num(r.rating, 1)}`), { direction: 'top' });
+      layer.addLayer(c);
+    }
+    const present = TYPES.filter((t) => rows.some((r) => r.property_type === t));
+    document.getElementById('tm-map-legend').replaceChildren(...present.map((t) => h('span', null, h('i', { style: `background:${typeColour(t)}` }), t)));
+    document.getElementById('tm-map-note').textContent = `${fmt.num(rows.length)} properties, coloured by type. Hover a point for its bookings.`;
+    refit('dest:' + state.dest + ':' + rows.length);
+  }
+  const refit = (key) => { if (key !== fitKey) { fitKey = key; fit(); setTimeout(fit, 0); } };
+
+  /* ---- Seasonality heatmap (d3): rows are property types, columns are months, colour is the row's share ---- */
+  function drawHeat(rows) {
+    const el = document.getElementById('tm-heat');
+    const types = TYPES.filter((t) => rows.some((r) => r.property_type === t));
+    if (!types.length) { empty('#tm-heat', 'No bookings for this filter.'); return; }
+    const totals = Object.fromEntries(types.map((t) => [t, rows.filter((r) => r.property_type === t).reduce((a, r) => a + (num(r.bookings) || 0), 0)]));
+    const share = (t, m) => { const r = rows.find((x) => x.property_type === t && +x.month_of_year === m); return r && totals[t] ? (num(r.bookings) || 0) / totals[t] : 0; };
+    const W = Math.max(320, el.clientWidth || 600), L0 = 118, cw = (W - L0 - 4) / 12, ch = 30, H = types.length * ch + 22;
+    const max = Math.max(...types.flatMap((t) => MONTHS.map((_, i) => share(t, i + 1))), 0.0001);
+    const colour = d3.scaleSequential(d3.interpolateRgb(css('--color-bg', '#F8FAFC'), css('--brand', '#4F46E5'))).domain([0, max]);
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart tm-heat').attr('role', 'img')
+      .attr('aria-label', 'Share of bookings by property type and check-in month');
+    types.forEach((t, ti) => {
+      svg.append('text').attr('x', 0).attr('y', ti * ch + ch / 2 + 4).text(t);
+      MONTHS.forEach((m, mi) => {
+        const v = share(t, mi + 1);
+        svg.append('rect').attr('x', L0 + mi * cw).attr('y', ti * ch).attr('width', cw).attr('height', ch).attr('rx', 3).attr('fill', colour(v))
+          .append('title').text(`${t}, ${m}: ${fmt.pct(v)} of its bookings`);
+      });
+    });
+    MONTHS.forEach((m, mi) => svg.append('text').attr('x', L0 + mi * cw + cw / 2).attr('y', H - 4).attr('text-anchor', 'middle').text(m[0] + (cw > 34 ? m.slice(1) : '')));
+    el.replaceChildren(svg.node());
+  }
+
+  /* ---- Everything else ---- */
+  function draw() {
+    const dests = dash.data('destinations');
+    const monthly = dash.data('monthly');
+    const season = dash.data('seasonality');
+    const status = dash.data('status');
+
+    // The destination filter lists every destination with properties of the chosen type.
+    if (dests.status === 'ok' && changed('options', dests)) {
+      bar.options('destination_id', dests.data.slice().sort((a, b) => a.destination.localeCompare(b.destination))
+        .map((r) => ({ value: r.destination_id, label: `${r.destination}, ${r.country}` })));
+      if (state.dest) bar.set('destination_id', state.dest);
+    }
+    const picked = state.dest && dests.status === 'ok' ? dests.data.find((r) => r.destination_id === state.dest) : null;
+    const scope = picked ? [picked] : (dests.data || []);
+    state.label = picked ? `${picked.destination}, ${picked.country}` : null;
+
+    if (changed('tiles', dests, state.dest) && kit.ready('#tm-tiles', dests)) {
+      const sum = (k) => scope.reduce((a, r) => a + (num(r[k]) || 0), 0);
+      const bookings = sum('bookings'), revenue = sum('revenue'), cancelled = sum('cancelled'), nights = sum('nights');
+      const reviews = sum('reviews');
+      const rating = reviews ? scope.reduce((a, r) => a + (num(r.rating) || 0) * (num(r.reviews) || 0), 0) / reviews : null;
+      kit.tiles('#tm-tiles', [
+        { label: 'Revenue', value: fmt.money(revenue), note: 'Bookings not cancelled' },
+        { label: 'Bookings', value: fmt.num(bookings), note: picked ? `${picked.destination}, ${picked.country}` : `${fmt.num(scope.length)} destinations` },
+        { label: 'Average nightly rate', value: fmt.money(nights ? revenue / nights : null), note: `${fmt.num(nights)} nights booked` },
+        { label: 'Cancellation rate', value: fmt.pct(bookings ? cancelled / bookings : null), tone: bookings && cancelled / bookings > 0.25 ? 'warn' : null },
+        { label: 'Guest rating', value: rating === null ? '–' : fmt.num(rating, 2) + ' / 5', note: `${fmt.num(reviews)} reviews` },
+        { label: 'Properties', value: fmt.num(sum('properties')), note: `from ${fmt.money(scope.length ? scope.reduce((a, r) => a + (num(r.avg_price) || 0) * (num(r.properties) || 0), 0) / Math.max(1, sum('properties')) : null)} a night on average` },
+      ]);
+    }
+
+    // Map: properties once a destination is picked, otherwise one circle per destination.
+    document.getElementById('tm-back').hidden = !state.dest;
+    if (state.dest) {
+      const props = dash.data('properties');
+      if (changed('map', props, state.dest) && props.status === 'ok') drawProperties(props.data);
+    } else if (changed('map', dests, state.dest) && dests.status === 'ok') drawDestinations(dests.data);
+
+    if (changed('top', dests) && kit.ready('#tm-top', dests)) {
+      if (!dests.data.length) empty('#tm-top', 'No destinations for this filter.');
+      else kit.bars('#tm-top', { rows: dests.data, label: 'destination', value: 'revenue', fmt: fmt.compact, max: 12,
+        color: (r) => (state.dest === r.destination_id ? 'var(--accent)' : null) });
+    }
+
+    if (changed('trend', monthly) && kit.ready('#tm-trend', monthly)) {
+      if (!monthly.data.length) { empty('#tm-trend', 'No bookings for this filter.'); }
+      else {
+        kit.line('#tm-trend', { rows: monthly.data, x: 'month', series: [{ key: 'revenue', label: 'Revenue' }], fmt: fmt.compact, label: 'Revenue by check-in month' });
+        const best = monthly.data.reduce((a, r) => ((num(r.revenue) || 0) > (num(a.revenue) || 0) ? r : a));
+        document.getElementById('tm-trend-note').textContent = `Busiest month: ${fmt.month(best.month)}, ${fmt.money(best.revenue)} from ${fmt.num(best.bookings)} bookings.`;
+      }
+    }
+
+    if (changed('heat', season) && kit.ready('#tm-heat', season)) drawHeat(season.data);
+
+    if (changed('status', status) && kit.ready('#tm-status', status)) {
+      const total = status.data.reduce((a, r) => a + (num(r.bookings) || 0), 0);
+      const tone = { cancelled: 'var(--signal-bad)', completed: 'var(--signal-ok)', confirmed: 'var(--brand)', pending: 'var(--signal-warn)' };
+      if (!status.data.length) empty('#tm-status', 'No bookings for this filter.');
+      else kit.bars('#tm-status', { rows: status.data.map((r) => ({ ...r, share: total ? (num(r.bookings) || 0) / total : null, label: r.status[0].toUpperCase() + r.status.slice(1) })),
+        label: 'label', value: 'share', fmt: (v) => fmt.pct(v), color: (r) => tone[r.status] });
+    }
+
+    if (changed('cancel', dests) && kit.ready('#tm-cancel', dests)) {
+      const rows = dests.data.filter((r) => (num(r.bookings) || 0) >= 50).map((r) => ({ ...r, rate: (num(r.cancelled) || 0) / (num(r.bookings) || 1) }));
+      if (!rows.length) empty('#tm-cancel', 'Not enough bookings for this filter.');
+      else kit.bars('#tm-cancel', { rows, label: 'destination', value: 'rate', fmt: (v) => fmt.pct(v), max: 10, color: () => 'var(--signal-warn)' });
+    }
+
+    if (changed('table', dests) && kit.ready('#tm-table', dests)) {
+      kit.table('#tm-table', {
+        rows: dests.data.map((r) => ({ ...r, cancel_rate: (num(r.cancelled) || 0) / Math.max(1, num(r.bookings) || 0), nightly: (num(r.revenue) || 0) / Math.max(1, num(r.nights) || 0) })),
+        sort: { key: 'revenue', dir: 'desc' },
+        csv: 'travel-destinations',
+        empty: 'No destinations for this filter',
+        onRow: (r) => pick(r.destination_id),
+        columns: [
+          { key: 'destination', label: 'Destination' },
+          { key: 'country', label: 'Country' },
+          { key: 'properties', label: 'Properties', align: 'right', fmt: (v) => fmt.num(v) },
+          { key: 'bookings', label: 'Bookings', align: 'right', fmt: (v) => fmt.num(v) },
+          { key: 'revenue', label: 'Revenue', align: 'right', fmt: (v) => fmt.money(v) },
+          { key: 'nightly', label: 'Nightly rate', align: 'right', fmt: (v) => fmt.money(v) },
+          { key: 'cancel_rate', label: 'Cancelled', align: 'right', fmt: (v) => fmt.pct(v) },
+          { key: 'rating', label: 'Rating', align: 'right', fmt: (v) => fmt.num(v, 2) },
+        ],
+      });
+    }
+
+    // Properties of the picked destination (the dataset only loads once one is picked).
+    const card = document.getElementById('tm-props-card');
+    card.hidden = !state.dest;
+    if (state.dest) {
+      const props = dash.data('properties');
+      document.getElementById('tm-props-h').textContent = picked ? `Properties in ${picked.destination}, ${picked.country}` : 'Properties';
+      if (changed('props', props, state.dest) && kit.ready('#tm-props', props)) {
+        kit.table('#tm-props', {
+          rows: props.data, sort: { key: 'revenue', dir: 'desc' }, csv: 'travel-properties', empty: 'No properties for this filter', max: 200,
+          columns: [
+            { key: 'title', label: 'Property' },
+            { key: 'property_type', label: 'Type' },
+            { key: 'bedrooms', label: 'Bedrooms', align: 'right', fmt: (v) => fmt.num(v) },
+            { key: 'base_price', label: 'Base price', align: 'right', fmt: (v) => fmt.money(v) },
+            { key: 'bookings', label: 'Bookings', align: 'right', fmt: (v) => fmt.num(v) },
+            { key: 'revenue', label: 'Revenue', align: 'right', fmt: (v) => fmt.money(v) },
+            { key: 'rating', label: 'Rating', align: 'right', fmt: (v) => fmt.num(v, 1) },
+          ],
+        });
+      }
+    }
+  }
+
+  if (dash.genieContext) dash.genieContext(() => ({ Destination: state.label || 'All destinations', 'Property type': dash.params().property_type || 'All types' }));
+
+  if (start.destination_id) state.dest = String(start.destination_id);
+  dash.onData(draw);
+  addEventListener('resize', () => { drawn.trend = null; drawn.heat = null; draw(); });
+})();
+</script>

@@ -63,17 +63,34 @@ jobs:
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
       # DATABRICKS_AUTH_TYPE: github-oidc   # with OIDC instead of a client secret
     steps:
+      # A fork or a copy that hasn't done the setup above has no host for this environment. Skip the deploy with a
+      # notice rather than fail every push. Environment variables can't be read in a job-level `if`, hence a step.
+      - name: Check this environment is set up
+        id: setup
+        run: |
+          if [ -z "$DATABRICKS_HOST" ]; then
+            echo "::notice::No DATABRICKS_HOST variable in the '$TARGET' GitHub environment, so nothing was deployed. See the setup notes at the top of .github/workflows/deploy.yml."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.setup.outputs.ready == 'true'
       - uses: actions/setup-python@v5
+        if: steps.setup.outputs.ready == 'true'
         with:
           python-version: "3.11"
       - run: pip install -r src/requirements.txt
+        if: steps.setup.outputs.ready == 'true'
       - uses: databricks/setup-cli@main
+        if: steps.setup.outputs.ready == 'true'
 
       - name: Validate bundle
+        if: steps.setup.outputs.ready == 'true'
         run: databricks bundle validate -t "$TARGET"
 
       - name: Run every dataset (LIMIT 0) against the ${{ env.TARGET }} catalogs
+        if: steps.setup.outputs.ready == 'true'
         run: |
           WAREHOUSE=$(databricks bundle validate -t "$TARGET" -o json | python -c "import json,sys; print(json.load(sys.stdin)['variables']['warehouse_id']['value'])")
           python scripts/check.py --env "$TARGET" --warehouse "$WAREHOUSE"
@@ -81,18 +98,21 @@ jobs:
       # What each view reads, for the freshness label. A failure only warns: the app then follows views itself.
       - name: Build the source map for the freshness label
         continue-on-error: true
+        if: steps.setup.outputs.ready == 'true'
         run: python scripts/build_sources_map.py --env "$TARGET"
 
       - name: Deploy bundle
+        if: steps.setup.outputs.ready == 'true'
         run: databricks bundle deploy -t "$TARGET"
 
       - name: Start the app with the new code
+        if: steps.setup.outputs.ready == 'true'
         run: databricks bundle run portal -t "$TARGET"
 
       # Dev and test are stopped again to save cost; start them when you need to test. Also runs when the start
       # step failed, so a broken deploy doesn't leave compute running.
       - name: Stop the app (dev and test)
-        if: always() && env.KEEP_RUNNING != 'true'
+        if: always() && steps.setup.outputs.ready == 'true' && env.KEEP_RUNNING != 'true'
         run: |
           for attempt in 1 2 3 4 5; do
             if databricks -t "$TARGET" apps stop "$APP_NAME"; then exit 0; fi

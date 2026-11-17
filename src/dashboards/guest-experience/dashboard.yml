@@ -1,0 +1,49 @@
+title: Guest Experience
+description: What guests say in 100,000 reviews and 1,900 support chats of a sample holiday-rental marketplace, by destination, topic and support agent.
+owner: Samples
+section: Travel
+order: 20
+groups: []            # everyone who can open the portal; this is public sample data
+params:
+  destination_id: {type: BIGINT}   # optional; filters the review sections only. Support chats aren't linked to a property
+# samples.wanderbricks is Databricks sample data that every user can read, with no row-level security, so one cached
+# result per filter value is shared by all viewers. It never changes. Guest names and contact details are never read.
+datasets:
+  destinations:
+    title: Ratings by destination
+    description: Reviews, average rating and share of low ratings per destination.
+    sql: sql/destinations.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample data (samples.wanderbricks), reviews from March 2023 to July 2025."
+  monthly:
+    title: Reviews by month
+    description: Reviews, average rating and the share of low and high ratings per month, from June 2023.
+    sql: sql/monthly.sql
+    cache: shared
+    cache_ttl: 24h
+  stars:
+    title: Rating distribution
+    description: Reviews per whole star (1 to 5).
+    sql: sql/stars.sql
+    cache: shared
+    cache_ttl: 24h
+  comments:
+    title: What guests say
+    description: Each review comment with how often it was left and its average rating.
+    sql: sql/comments.sql
+    cache: shared
+    cache_ttl: 24h
+  tickets:
+    title: Support tickets
+    description: One row per support chat with its agent, topic (from keywords in the guest's first message) and the guest's first and last mood.
+    sql: sql/tickets.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample data (samples.wanderbricks.customer_support_logs), chats from October 2022 to July 2025."
+  tones:
+    title: Tone of messages
+    description: Messages per sender (guest or agent) and labelled tone.
+    sql: sql/tones.sql
+    cache: shared
+    cache_ttl: 24h

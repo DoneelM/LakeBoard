@@ -1,0 +1,187 @@
+<style>
+/* Own classes and ids start with or- so they can't clash with the shell. Colours come from the theme variables. */
+.or-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+.or-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+.or-hint { color: var(--color-fg-muted); font-size: 13px; margin: 0; }
+.or-heat rect { stroke: var(--color-panel); stroke-width: 1.5; }
+.or-heat text { fill: var(--color-fg-muted); font-size: 11px; }
+.or-mix { display: flex; height: 34px; border-radius: 4px; overflow: hidden; margin: 4px 0 10px; }
+.or-mix span { display: flex; align-items: center; justify-content: center; color: var(--brand-contrast); font-size: 12px; font-weight: 700; min-width: 0; white-space: nowrap; overflow: hidden; }
+.or-mix-legend { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); font-size: 13px; }
+.or-mix-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.or-mix-legend b { display: block; font-size: 16px; }
+.or-mix-legend small { color: var(--color-fg-muted); }
+.or-sub { margin: 20px 0 8px; font-size: 13px; font-weight: 700; }
+</style>
+
+<div class="kit-page">
+  <h1>Omnichannel Retail</h1>
+  <p class="kit-sub">A retailer selling through stores, a catalog and the web, from the TPC-DS benchmark data in Databricks <code>samples.tpcds_sf1</code> (generated, scale factor 1). Pick a year; it is compared with the year before.</p>
+
+  <div class="or-bar"><div id="or-filters"></div></div>
+
+  <div id="or-tiles" data-source="monthly"></div>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="monthly">
+      <h2 id="or-trend-h">Sales by month</h2>
+      <div id="or-trend"></div>
+      <p class="or-note" id="or-trend-note"></p>
+    </section>
+    <section class="kit-card" data-source="monthly">
+      <h2>Channel mix</h2>
+      <div id="or-mix"></div>
+    </section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px" data-source="hours">
+    <h2>When each channel sells</h2>
+    <div id="or-heat"></div>
+    <p class="or-note">Share of each channel's line items by hour of the day. Stores trade 8 am to 8 pm; catalog and web orders come in around the clock.</p>
+  </section>
+
+  <div class="kit-grid" style="margin-top:12px">
+    <section class="kit-card" data-source="categories">
+      <h2>Return rate by category</h2>
+      <div id="or-returns"></div>
+      <p class="or-note">Value returned in the year as a share of sales in the year, all channels.</p>
+    </section>
+    <section class="kit-card" data-source="states">
+      <h2>Top customer states</h2>
+      <div id="or-states"></div>
+      <p class="or-note">Sales by the customer's billing state, all channels.</p>
+    </section>
+  </div>
+
+  <section class="kit-card" style="margin-top:12px" data-source="categories">
+    <h2>Categories by channel</h2>
+    <div id="or-table"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const { fmt, h, num } = kit;
+  const CHANNELS = ['Store', 'Catalog', 'Web'];
+  const colourVar = { Store: '--chart-1', Catalog: '--chart-4', Web: '--chart-2' };
+  const css = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  const colour = (c) => css(colourVar[c], '#6366F1');
+  const YEARS = [2002, 2001, 2000, 1999, 1998];
+  const drawn = {};
+  const changed = (name, ...deps) => {
+    const key = deps.map((d) => (d && typeof d === 'object' && 'status' in d ? [d.status, d.data] : [d]));
+    const prev = drawn[name];
+    const same = prev && prev.length === key.length && prev.every((p, i) => p.length === key[i].length && p.every((x, j) => x === key[i][j]));
+    drawn[name] = key;
+    return !same;
+  };
+  const sum = (rows, k) => rows.reduce((a, r) => a + (num(r[k]) || 0), 0);
+  const change = (now, before) => (before ? now / before - 1 : null);
+  const arrow = (v) => (v === null ? '' : `${v >= 0 ? '▲' : '▼'} ${fmt.pct(Math.abs(v))}`);
+
+  kit.filters('#or-filters', [{ id: 'year', label: 'Year', type: 'select', all: false, options: YEARS.map(String), value: String(dash.params().year) }],
+    (v) => dash.setParams({ year: +v.year }));
+
+  /* ---- Hour heatmap (d3): one row per channel, share of that channel's items in each hour ---- */
+  function drawHeat(rows) {
+    const el = document.getElementById('or-heat');
+    const W = Math.max(320, el.clientWidth || 800), L0 = 64, cw = (W - L0 - 4) / 24, ch = 30, H = CHANNELS.length * ch + 22;
+    const totals = Object.fromEntries(CHANNELS.map((c) => [c, sum(rows.filter((r) => r.channel === c), 'items')]));
+    const share = (c, hr) => { const r = rows.find((x) => x.channel === c && +x.hour === hr); return r && totals[c] ? (num(r.items) || 0) / totals[c] : 0; };
+    const max = Math.max(0.0001, ...CHANNELS.flatMap((c) => d3.range(24).map((hr) => share(c, hr))));
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart or-heat').attr('role', 'img').attr('aria-label', 'Share of each channel\'s sales by hour of day');
+    CHANNELS.forEach((c, ci) => {
+      const scale = d3.scaleSequential(d3.interpolateRgb(css('--color-bg', '#F8FAFC'), colour(c))).domain([0, max]);
+      svg.append('text').attr('x', 0).attr('y', ci * ch + ch / 2 + 4).text(c);
+      d3.range(24).forEach((hr) => svg.append('rect').attr('x', L0 + hr * cw).attr('y', ci * ch).attr('width', cw).attr('height', ch).attr('rx', 2).attr('fill', scale(share(c, hr)))
+        .append('title').text(`${c}, ${String(hr).padStart(2, '0')}:00: ${fmt.pct(share(c, hr))} of its items`));
+    });
+    d3.range(0, 24, cw > 26 ? 1 : 3).forEach((hr) => svg.append('text').attr('x', L0 + hr * cw + cw / 2).attr('y', H - 4).attr('text-anchor', 'middle').text(String(hr).padStart(2, '0')));
+    el.replaceChildren(svg.node());
+  }
+
+  function draw() {
+    const monthly = dash.data('monthly');
+    const hours = dash.data('hours');
+    const cats = dash.data('categories');
+    const states = dash.data('states');
+    const year = String(dash.params().year), prior = String(+year - 1);
+
+    if (changed('top', monthly) && kit.ready('#or-tiles', monthly)) {
+      const now = monthly.data.filter((r) => r.month.startsWith(year)), before = monthly.data.filter((r) => r.month.startsWith(prior));
+      const sales = sum(now, 'sales'), orders = sum(now, 'orders');
+      const peak = sum(now.filter((r) => +r.month.slice(5) >= 8), 'sales');
+      const web = sum(now.filter((r) => r.channel === 'Web'), 'sales');
+      const prevAov = sum(before, 'orders') ? sum(before, 'sales') / sum(before, 'orders') : null;
+      kit.tiles('#or-tiles', [
+        { label: `Sales ${year}`, value: '$' + fmt.compact(sales), note: before.length ? `${arrow(change(sales, sum(before, 'sales')))} vs ${prior}` : `No ${prior} data` },
+        { label: 'Orders', value: fmt.num(orders), note: before.length ? `${arrow(change(orders, sum(before, 'orders')))} vs ${prior}` : '' },
+        { label: 'Average order', value: fmt.money(orders ? sales / orders : null), note: prevAov ? `${arrow(change(sales / orders, prevAov))} vs ${prior}` : '' },
+        { label: 'August to December', value: fmt.pct(sales ? peak / sales : null), note: 'of the year\'s sales', tone: 'warn' },
+        { label: 'Web share', value: fmt.pct(sales ? web / sales : null), note: 'of sales' },
+      ]);
+
+      // Monthly lines, one per channel, for the chosen year.
+      const months = [...new Set(now.map((r) => r.month))].sort();
+      const pivot = months.map((m) => Object.fromEntries([['month', m], ...CHANNELS.map((c) => [c, (now.find((r) => r.month === m && r.channel === c) || {}).sales || null])]));
+      document.getElementById('or-trend-h').textContent = `Sales by month, ${year}`;
+      if (!pivot.length) document.getElementById('or-trend').replaceChildren(h('p', { class: 'or-hint' }, 'No sales this year.'));
+      else {
+        kit.line('#or-trend', { rows: pivot, x: 'month', series: CHANNELS.map((c) => ({ key: c, label: c, color: colour(c) })), fmt: (v) => '$' + fmt.compact(v), label: 'Sales by month and channel' });
+        const totals = months.map((m) => ({ m, s: sum(now.filter((r) => r.month === m), 'sales') }));
+        const best = totals.reduce((a, r) => (r.s > a.s ? r : a)), low = totals.reduce((a, r) => (r.s < a.s ? r : a));
+        document.getElementById('or-trend-note').textContent = `Peak month ${fmt.month(best.m)} sold ${fmt.num(best.s / low.s, 1)} times as much as the quietest, ${fmt.month(low.m)}.`;
+      }
+
+      // Channel mix: one stacked bar plus a figure per channel.
+      const by = CHANNELS.map((c) => ({ c, s: sum(now.filter((r) => r.channel === c), 'sales'), p: sum(before.filter((r) => r.channel === c), 'sales'), o: sum(now.filter((r) => r.channel === c), 'orders') }));
+      const aov = by.map((x) => ({ channel: x.c, aov: x.o ? x.s / x.o : null }));
+      document.getElementById('or-mix').replaceChildren(
+        h('div', { class: 'or-mix', role: 'img', 'aria-label': by.map((x) => `${x.c} ${fmt.pct(x.s / sales)}`).join(', ') },
+          by.map((x) => h('span', { style: `width:${(100 * x.s / (sales || 1)).toFixed(2)}%;background:${colour(x.c)}` }, fmt.pct(x.s / (sales || 1), 0)))),
+        h('div', { class: 'or-mix-legend' }, by.map((x) => h('div', null, h('i', { style: `background:${colour(x.c)}` }), x.c,
+          h('b', null, '$' + fmt.compact(x.s)), h('small', null, x.p ? `${arrow(change(x.s, x.p))} vs ${prior}` : '')))),
+        h('h3', { class: 'or-sub' }, 'Average order by channel'),
+        h('div', { id: 'or-aov' }));
+      kit.bars('#or-aov', { rows: aov, label: 'channel', value: 'aov', fmt: (v) => fmt.money(v), color: (r) => colour(r.channel) });
+    }
+
+    if (changed('heat', hours) && kit.ready('#or-heat', hours)) drawHeat(hours.data);
+
+    if (changed('cats', cats) && kit.ready('#or-returns', cats) && kit.ready('#or-table', cats)) {
+      const names = [...new Set(cats.data.map((r) => r.category))];
+      const rows = names.map((category) => {
+        const rs = cats.data.filter((r) => r.category === category);
+        const row = { category, total: sum(rs, 'sales'), returns: sum(rs, 'returns') };
+        for (const c of CHANNELS) row[c] = sum(rs.filter((r) => r.channel === c), 'sales');
+        row.rate = row.total ? row.returns / row.total : null;
+        row.web_share = row.total ? row.Web / row.total : null;
+        return row;
+      });
+      const avg = sum(rows, 'returns') / (sum(rows, 'total') || 1);
+      kit.bars('#or-returns', { rows: rows.filter((r) => r.category !== 'Uncategorised'), label: 'category', value: 'rate', fmt: (v) => fmt.pct(v, 2), max: 12,
+        color: (r) => (r.rate > avg ? 'var(--signal-warn)' : 'var(--chart-3)') });
+      kit.table('#or-table', {
+        rows, sort: { key: 'total', dir: 'desc' }, csv: `omnichannel-categories-${year}`,
+        columns: [
+          { key: 'category', label: 'Category' },
+          ...CHANNELS.map((c) => ({ key: c, label: c, align: 'right', fmt: (v) => fmt.money(v) })),
+          { key: 'total', label: 'Total', align: 'right', fmt: (v) => fmt.money(v) },
+          { key: 'web_share', label: 'Web share', align: 'right', fmt: (v) => fmt.pct(v) },
+          { key: 'rate', label: 'Return rate', align: 'right', fmt: (v) => fmt.pct(v, 2) },
+        ],
+      });
+    }
+
+    if (changed('states', states) && kit.ready('#or-states', states)) {
+      const names = [...new Set(states.data.map((r) => r.state))];
+      const rows = names.map((state) => ({ state, sales: sum(states.data.filter((r) => r.state === state), 'sales') }));
+      kit.bars('#or-states', { rows, label: 'state', value: 'sales', fmt: (v) => '$' + fmt.compact(v), max: 12 });
+    }
+  }
+
+  if (dash.genieContext) dash.genieContext(() => ({ Year: String(dash.params().year) }));
+  dash.onData(draw);
+  addEventListener('resize', () => { drawn.top = null; drawn.heat = null; draw(); });
+})();
+</script>

@@ -24,7 +24,7 @@ catalogs:
 static_catalogs: [samples]
 
 # Sections of the left navigation, in display order. A dashboard picks one with `section:` in dashboard.yml.
-sections: [Samples, Finance, Operations, Other]
+sections: [Samples, Travel, Retail, Climate, Finance, Operations, Other]
 
 # The name and logo in the left navigation and the browser tab. `logo` is a path under /static (put your file in
 # src/static/brand) or an https URL on one of the image_hosts below. Pages can show it with {{LOGO}}.

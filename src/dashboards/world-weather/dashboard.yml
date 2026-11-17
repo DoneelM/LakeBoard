@@ -1,0 +1,25 @@
+title: World Weather
+description: Sixteen days of observed weather and a 15-day forecast for 50 world cities, on a temperature map with a day-by-day view of any city.
+owner: Samples
+section: Climate
+order: 10
+groups: []            # everyone who can open the portal; this is public sample data
+libs: [leaflet]       # the city map
+params:
+  city: {type: STRING, default: "sydney"}   # the city shown day by day; city names are as stored (lower case)
+# samples.accuweather is Databricks sample data (from the AccuWeather Marketplace listing) that every user can read,
+# with no row-level security, so one cached result is shared by all viewers. It never changes.
+datasets:
+  cities:
+    title: Cities
+    description: One row per city with its location, observed temperature, rain, sunshine and UV, and the forecast average.
+    sql: sql/cities.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Databricks sample data (samples.accuweather): observed 27 June to 12 July 2024, forecast 12 to 26 July 2024."
+  daily:
+    title: Day by day
+    description: Observed and forecast weather per day for the chosen city.
+    sql: sql/daily.sql
+    cache: shared
+    cache_ttl: 24h
