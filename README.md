@@ -12,6 +12,28 @@ answers questions with the viewer's own access.
 
 ![City Trips, one of the sample dashboards: KPI tiles, trips per day, a day-by-hour heatmap and the busiest ZIP codes](docs/images/city-trips.png)
 
+## From Power BI to LakeBoard
+
+For Power BI migrations, the intended end-to-end architecture shares reviewed business metrics between
+dashboards and natural-language analytics:
+
+```mermaid
+flowchart TD
+    P[Power BI project in Git] --> A[Agent-assisted migration]
+    A --> M[Reviewed Unity Catalog metric views]
+    A --> D[LakeBoard dashboard folders]
+    M --> D
+    M --> G[Curated Genie Agents]
+    D --> L[One LakeBoard app per environment]
+    G --> L
+```
+
+Metric views and Genie Agents are reviewed and provisioned separately. LakeBoard currently scaffolds and
+validates dashboard folders and connects them to existing Genie Agents; automatic semantic-model conversion
+and provisioning are not included in this repository. Follow the [migration guide](docs/MIGRATION.md) to map
+and reconcile an existing report. New dashboards can start directly from approved Databricks data using the
+[shared authoring workflow](docs/DASHBOARD_WORKFLOW.md).
+
 ## Quickstart (about 10 minutes)
 
 This runs the seven sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
@@ -104,17 +126,18 @@ Read AGENTS.md and follow docs/DASHBOARD_WORKFLOW.md to build a LakeBoard dashbo
 Use docs/AUTHORING.md for the APIs and City Trips as the example.
 The dashboard should answer [question] for [audience], using [approved data].
 The owning team is [team], the section is [section], and allowed viewers are [groups].
-Use connected Genie MCP tools, if available, to clarify sources and metric definitions.
+Use connected Databricks Genie One MCP tools, if available, to clarify sources and metric definitions.
 Return the dashboard folder, validation results and anything still unverified.
 ```
 
-Business users can describe a dashboard to their agent, explore approved data through Genie MCP, and hand the
-generated folder to the data team for review and hosting. See [Build your own dashboard](docs/BUSINESS_AUTHORS.md)
+Business users can describe a dashboard to their agent, explore approved data through Databricks Genie One MCP,
+and hand the generated folder to the data team for review and hosting. See [Build your own dashboard](docs/BUSINESS_AUTHORS.md)
 for the brief and handoff. No separate app is needed for each report.
 
 The hosting format is a manifest, SQL and HTML/CSS/JavaScript using LakeBoard's `dash` and `kit` APIs. Direct
 repository authoring is the simplest route; other tools' previews can be adapted to that contract. Serving the
-dashboard does not require the agent or model that authored it. Optional Ask Genie is configured separately.
+dashboard does not require the agent or model that authored it. Databricks Genie One MCP is used during authoring;
+the optional in-dashboard Ask Genie integration uses a curated Genie agent and is configured separately.
 
 ## Features
 
@@ -171,7 +194,7 @@ The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them
 |---|---|
 | [docs/DESIGN.md](docs/DESIGN.md) | How the portal works and why |
 | [docs/DASHBOARD_WORKFLOW.md](docs/DASHBOARD_WORKFLOW.md) | Shared creation and migration workflow for all coding agents |
-| [docs/BUSINESS_AUTHORS.md](docs/BUSINESS_AUTHORS.md) | Building with a coding agent and Genie MCP, then handing off for hosting |
+| [docs/BUSINESS_AUTHORS.md](docs/BUSINESS_AUTHORS.md) | Building with a coding agent and Databricks Genie One MCP, then handing off for hosting |
 | [docs/AUTHORING.md](docs/AUTHORING.md) | Adding a dashboard: the contract, the page kit, the checks |
 | [docs/PROMOTION.md](docs/PROMOTION.md) | Moving a change through dev, test and prod |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Moving a report from Power BI, including who uses it today |

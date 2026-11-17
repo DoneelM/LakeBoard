@@ -1,8 +1,8 @@
 # Build your own dashboard
 
 You can describe a dashboard to a coding agent and have it build a LakeBoard folder. Use Claude Code, Codex,
-Cursor or another agent that can write files. If your agent has an approved Genie MCP connection, use it to
-explore the data and clarify business metrics before building.
+Cursor or another agent that can write files. If your agent has an approved Databricks Genie One MCP connection,
+use it to explore the data and clarify business metrics before building.
 
 The data team reviews and hosts the result in the shared app. You do not need to create or deploy your own
 Databricks App.
@@ -13,8 +13,14 @@ Tell the agent who will use the dashboard, what decision it should help with, th
 and who should be allowed to see it. A screenshot, sketch or existing Power BI report can provide context.
 For an existing report, include its semantic model definitions as well as its page definitions.
 
-Ask the data team which Genie connection, datasets, navigation section and access groups to use. The agent
-should ask for missing information rather than guess a definition such as revenue, active customer or margin.
+Ask the data team which Databricks Genie One MCP connection, datasets, navigation section and access groups
+to use. The agent should ask for missing information rather than guess a definition such as revenue, active
+customer or margin.
+
+Databricks Genie One MCP supports data discovery, business questions and SQL generation across the data you
+can access. Your data team can use the [Databricks connection guide](https://docs.databricks.com/aws/en/agents/mcp-tools/genie-mcp)
+to configure it. This authoring connection is separate from the optional Ask Genie bar inside a hosted dashboard,
+which uses a curated Genie agent configured by the data team.
 
 ## Give the agent the LakeBoard instructions
 
@@ -31,11 +37,11 @@ Use docs/AUTHORING.md for the supported APIs and City Trips as the example.
 Question to answer: [business question and audience]
 Title and owning team: [title; team]
 Navigation section and allowed viewers: [section; groups agreed with the data team]
-Data or existing report: [approved sources, Genie agent, or Power BI project]
+Data or existing report: [approved sources or Power BI project]
 Measures, filters and interactions: [requirements]
 Design reference: [optional screenshot or sketch]
 
-Use the connected Genie MCP tools, if available, to clarify sources and metric definitions.
+Use the connected Databricks Genie One MCP tools, if available, to clarify sources and metric definitions.
 Ask me about missing business definitions. Use LakeBoard's existing kit and theme.
 Return a dashboard folder with dashboard.yml, index.html, sql files and README.md.
 Include the checks you ran and anything the data team still needs to verify.

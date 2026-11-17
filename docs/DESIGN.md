@@ -20,7 +20,7 @@ Why each feature and design choice was made, and its limitations, is recorded in
   reading its own catalog if you want ([PROMOTION.md](PROMOTION.md)).
 - **Support any coding agent.** Authors follow one shared workflow and target LakeBoard's `dash` and `kit`
   APIs. Direct repository authoring and adapted prototypes produce the same dashboard folder. Business authors
-  can use Genie MCP for data discovery and hand the folder to the data team for hosting.
+  can use Databricks Genie One MCP for data discovery and hand the folder to the data team for hosting.
 
 ## Non-goals
 - Write-back or data entry.
@@ -222,8 +222,8 @@ one on Databricks AI/BI dashboards. The shell adds it (`static/genie.js`); pages
   unchanged), and the portal never calls Genie as its service principal. If it did, everyone would see whatever the
   app can read, Unity Catalog row filters would stop applying, and Genie's history would show one user for all.
   For the same reason the bar is refused on dashboards that read data as the app (`auth: app`).
-- **Why not Genie One.** Genie One answers across all the data a person can see, without a curated space. A
-  dashboard needs answers that use the same views and definitions as its numbers, which is what a curated space
+- **Why Ask Genie uses a curated space rather than Genie One.** Genie One answers across all the data a person
+  can see, without a curated space. A dashboard needs answers that use the same views and definitions as its numbers, which is what a curated space
   holds (tables, instructions, example SQL). A general assistant is a separate product decision.
 - **How context reaches Genie.** The Conversation API has no field for context. So the portal puts a short
   plain-text preamble before the question: the dashboard title, its `about` text, its SQL parameters, and the page's
@@ -267,8 +267,8 @@ report, rebuild and reconcile it, then cut over and retire the original.
 
 ## Who builds, who hosts
 The intended model is that business teams build dashboards and the data team hosts them.
-- **Business author:** builds a dashboard folder with an AI coding tool, optionally using Genie MCP to explore
-  approved data. [BUSINESS_AUTHORS.md](BUSINESS_AUTHORS.md) explains the handoff. Every agent follows
+- **Business author:** builds a dashboard folder with an AI coding tool, optionally using Databricks Genie One
+  MCP to explore approved data. [BUSINESS_AUTHORS.md](BUSINESS_AUTHORS.md) explains the handoff. Every agent follows
   [DASHBOARD_WORKFLOW.md](DASHBOARD_WORKFLOW.md); `AGENTS.md` and the Claude skill both point there.
 - **Automatic checks:** read-only SQL, allowed catalogs, declared parameters, no outside scripts, valid settings.
 - **Data team review:** query cost and grain, access settings, and the reconciliation against the old report.
