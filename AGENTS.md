@@ -4,8 +4,9 @@ LakeBoard: one Databricks App hosting many dashboards under `src/dashboards/`.
 
 ## Read what the task needs, not everything
 
-- Adding or changing a dashboard: `docs/AUTHORING.md` (plus `docs/MIGRATION.md` when replacing a Power BI report).
-  Worked example: `src/dashboards/city-trips/`.
+- Adding or changing a dashboard: follow `docs/DASHBOARD_WORKFLOW.md`, the shared workflow for every coding
+  agent. `docs/AUTHORING.md` defines the APIs; also read `docs/MIGRATION.md` when replacing a Power BI report.
+  Worked example: `src/dashboards/city-trips/`. Business authors can start with `docs/BUSINESS_AUTHORS.md`.
 - Changing the platform (`src/app.py`, `src/portal/`, `src/static/`, `scripts/`, the pipelines, `databricks.yml`,
   `resources/`): `docs/DESIGN.md`, `docs/OPERATIONS.md`, and the related record in `docs/decisions/`.
 - Caching, refresh, deploys, grants, starting and stopping apps: `docs/OPERATIONS.md`.
@@ -45,6 +46,10 @@ LakeBoard: one Databricks App hosting many dashboards under `src/dashboards/`.
     Apps, or deploy bundles. Dry runs that only print are fine; always pass an explicit CLI profile the user named.
 
 ## Commands
+
+The shared workflow applies whether the author uses repository tools or hands a generated folder to the data
+team. Agents that do not discover `AGENTS.md` automatically must be explicitly asked to read it. Agent-specific
+skills and instruction files should link to the shared workflow rather than duplicate its steps.
 
 | Task | Command |
 |---|---|

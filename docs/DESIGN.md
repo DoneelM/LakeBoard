@@ -18,8 +18,9 @@ Why each feature and design choice was made, and its limitations, is recorded in
   can build, with any AI coding tool.
 - **Promote like the rest of the platform.** `develop`, `release` and `main` deploy to dev, test and prod, each
   reading its own catalog if you want ([PROMOTION.md](PROMOTION.md)).
-- **Keep the Claude artifact workflow.** Pages use the same small `dash` API as Claude Dashboard artifacts, so
-  a page can be prototyped as an artifact and promoted to the portal unchanged.
+- **Support any coding agent.** Authors follow one shared workflow and target LakeBoard's `dash` and `kit`
+  APIs. Direct repository authoring and adapted prototypes produce the same dashboard folder. Business authors
+  can use Databricks Genie One MCP for data discovery and hand the folder to the data team for hosting.
 
 ## Non-goals
 - Write-back or data entry.
@@ -46,8 +47,8 @@ Browser ──SSO──▶ Databricks App (FastAPI, 1 instance per environment)
   in-memory TTL cache.
 - **Queries use the Databricks SDK Statement Execution API** with named parameters (`:name`). No extra driver
   is needed, and parameters are always bound, never string-formatted.
-- **The page receives column names plus rows of strings,** the same shape a Claude artifact receives from a
-  CSV, so pages convert numbers themselves (`+r.revenue`).
+- **The page receives column names plus rows of strings or nulls,** so pages convert numbers with `kit.num`
+  and format them with `kit.fmt`.
 
 ## Repository layout
 
@@ -56,7 +57,7 @@ databricks.yml                 bundle: variables + dev / test / prod targets
 .github/workflows/deploy.yml   GitHub Actions: checks on every PR; deploy on develop (dev), release (test), main (prod)
 azure-pipelines.yml            the same for Azure DevOps (pipelines/deploy-steps.yml holds the shared deploy steps)
 resources/portal.app.yml       the app resource (warehouse, user scopes: sql, genie, viewers group)
-AGENTS.md, CLAUDE.md           rules for AI coding tools; .claude/skills/new-dashboard is the Claude Code skill
+AGENTS.md, CLAUDE.md           shared rules; .claude/skills/new-dashboard links to docs/DASHBOARD_WORKFLOW.md
 src/                           ← app source (bundle source_code_path)
   app.yaml                     runtime command + env
   app.py                       FastAPI routes, left navigation, security headers, usage log
@@ -70,7 +71,8 @@ src/                           ← app source (bundle source_code_path)
 scripts/                       new_dashboard.py, check.py, run_local.ps1 / run_local.sh, grant_app_access.py,
                                build_sources_map.py, powerbi_usage.py
 tests/                         pytest: every dashboard valid; the rules reject what they should
-docs/                          DESIGN, AUTHORING, PROMOTION, MIGRATION, OPERATIONS, decisions/
+docs/                          DESIGN, DASHBOARD_WORKFLOW, BUSINESS_AUTHORS, AUTHORING, PROMOTION, MIGRATION,
+                               OPERATIONS, decisions/
 ```
 
 ## Dashboard manifest (`dashboard.yml`)
@@ -191,7 +193,7 @@ The title bar tells people how old the data on screen is, so they don't press Re
   and the request is cut off after 10 seconds with the rest marked unknown.
 
 ## Page runtime (`static/dash.js`) and page kit (`static/kit.js`)
-`dash.js` implements the subset of the Claude Dashboard `dash` API that pages use:
+`dash.js` provides LakeBoard's data runtime (originally adapted from the Claude Dashboard `dash` API):
 - **Data:** `data(id)` (lazy fetch, then `{status, data, columns, message, refreshing}`) and `onData(fn)`.
 - **Filters:** `params()`, `setParams()` and `resetParams()`. Changing a parameter that a dataset's SQL uses re-fetches that dataset.
 - **Other:** `allowed(id)`, `env`, `setLink()` (URL hash), `refresh(id)`, `calc()` and `colors`.
@@ -220,8 +222,8 @@ one on Databricks AI/BI dashboards. The shell adds it (`static/genie.js`); pages
   unchanged), and the portal never calls Genie as its service principal. If it did, everyone would see whatever the
   app can read, Unity Catalog row filters would stop applying, and Genie's history would show one user for all.
   For the same reason the bar is refused on dashboards that read data as the app (`auth: app`).
-- **Why not Genie One.** Genie One answers across all the data a person can see, without a curated space. A
-  dashboard needs answers that use the same views and definitions as its numbers, which is what a curated space
+- **Why Ask Genie uses a curated space rather than Genie One.** Genie One answers across all the data a person
+  can see, without a curated space. A dashboard needs answers that use the same views and definitions as its numbers, which is what a curated space
   holds (tables, instructions, example SQL). A general assistant is a separate product decision.
 - **How context reaches Genie.** The Conversation API has no field for context. So the portal puts a short
   plain-text preamble before the question: the dashboard title, its `about` text, its SQL parameters, and the page's
@@ -265,8 +267,9 @@ report, rebuild and reconcile it, then cut over and retire the original.
 
 ## Who builds, who hosts
 The intended model is that business teams build dashboards and the data team hosts them.
-- **Business author:** builds a dashboard folder with an AI coding tool, following AUTHORING.md. `AGENTS.md` gives
-  any tool the rules; Claude Code also has a `new-dashboard` skill.
+- **Business author:** builds a dashboard folder with an AI coding tool, optionally using Databricks Genie One
+  MCP to explore approved data. [BUSINESS_AUTHORS.md](BUSINESS_AUTHORS.md) explains the handoff. Every agent follows
+  [DASHBOARD_WORKFLOW.md](DASHBOARD_WORKFLOW.md); `AGENTS.md` and the Claude skill both point there.
 - **Automatic checks:** read-only SQL, allowed catalogs, declared parameters, no outside scripts, valid settings.
 - **Data team review:** query cost and grain, access settings, and the reconciliation against the old report.
 - **Platform:** the data team owns the shell, the kit, the pipeline, access and cost.

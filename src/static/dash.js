@@ -1,4 +1,4 @@
-/* Portal runtime: the subset of the Claude Dashboard `dash` API that pages use, backed by /api/d/<slug>/data/<id>.
+/* LakeBoard data runtime: the documented `dash` API, backed by /api/d/<slug>/data/<id>.
  * Datasets load lazily on first dash.data(id). Rows arrive as strings (like a CSV), so pages convert numbers. */
 (() => {
   const cfg = window.PORTAL;
