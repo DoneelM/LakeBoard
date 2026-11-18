@@ -37,7 +37,7 @@ and reconcile an existing report. New dashboards can start directly from approve
 
 ## Quickstart (about 10 minutes)
 
-This runs the seven sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
+This runs the sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
 Unity Catalog workspaces (an admin can hide it). [Databricks Free Edition](https://www.databricks.com/learn/free-edition)
 works well: it has a serverless starter warehouse, Databricks Apps and the `samples` catalog.
 
@@ -175,6 +175,24 @@ the optional in-dashboard Ask Genie integration uses a curated Genie agent and i
 |---|---|---|
 | Migrate a Power BI report | Data team | Claude Code reads the Power BI project and writes the dashboard folder directly ([docs/MIGRATION.md](docs/MIGRATION.md)) |
 | Host a dashboard built in Claude | Business users, then the data team | Share the Claude dashboard; Claude Code imports it as a draft, wires its data to Unity Catalog and reconciles it ([docs/AUTHORING.md](docs/AUTHORING.md)) |
+
+## Travel Operations showcase
+
+[Travel Operations](src/dashboards/travel-operations/) brings the public Wanderbricks sample together as an
+operating view: executive overview, saved destinations, property drill-down and guest experience. Built by
+Doneel Maran, it demonstrates one dashboard folder with keyboard navigation, light/dark themes and a TV view.
+The 2025 sample is historical and partial; booked value is not recognized revenue.
+
+![Travel Operations: booking KPIs, a world destination map, booking-value trend and cancellation watch](docs/images/travel-operations-overview.png)
+
+<details>
+<summary>TV view and guest experience</summary>
+
+![Travel Operations TV view: a presentation layout with the current destination scope and an Escape exit](docs/images/travel-operations-tv.png)
+
+![Travel Operations Guest Experience: rating distribution, repeated review phrases and low-rating share by destination](docs/images/travel-operations-guests.png)
+
+</details>
 
 ## Data freshness
 
