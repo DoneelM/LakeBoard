@@ -7,3 +7,5 @@ __pycache__/
 usage/
 src/sources_map.json
 *.local.yml
+# Snapshot rows of todo datasets (Claude artifact imports): business data, never committed or deployed
+src/dashboards/*/snapshots/

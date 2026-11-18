@@ -190,6 +190,35 @@ says what it shows and how its numbers were checked; see `src/dashboards/city-tr
 Branch from `main`, then follow [PROMOTION.md](PROMOTION.md). Reviewers check the SQL (cost, grain, tables),
 the access settings, and the reconciliation.
 
+## Importing a Claude dashboard
+
+Business users can build a dashboard as a Claude Dashboard artifact and send the link to the data team. Claude Code
+turns it into a draft here with the `import-claude-dashboard` skill
+([`.claude/skills/import-claude-dashboard/SKILL.md`](../.claude/skills/import-claude-dashboard/SKILL.md)), which
+runs `scripts/import_artifact.py` and `scripts/compare_snapshot.py`.
+
+**What carries over unchanged:** the page (`index.html`, with its extra files in `assets/`, as `page: artifact`),
+its parameters (types taken from the defaults and the artifact's rules) and any Databricks SQL query, which becomes
+`sql/<id>.sql` with `:name` parameters. The import lands as `status: draft` under Drafts, visible to `drafts_groups`
+(`src/environments.yml`) and the dashboard's own `groups`.
+
+**What the data team does:**
+
+- Write the SQL for every dataset marked `todo: true`. Most artifacts show files saved by a scheduled task, so
+  there is often no query to copy; the stub SQL lists the tables the artifact named and the columns the page reads.
+  When the artifact keeps that task's SQL (a refresh routine in its `dash` store), the import writes it to
+  `sql/<id>.sql` but leaves `todo: true` until it is reconciled.
+  The file's rows are kept as `snapshots/<id>.json` (gitignored, never committed) to reconcile against with
+  `compare_snapshot.py`, and to preview the page locally with `PORTAL_PREVIEW_SNAPSHOTS=1`.
+- Find a Unity Catalog source (Lakehouse Federation or ingestion) for anything the artifact read from another
+  system.
+- Check the page scan in the generated `IMPORT.md`: external URLs, `fetch`, iframes and forms don't work in the
+  portal, and theme tokens outside the portal's set may not resolve.
+- Set `owner:` and `groups:`, delete the snapshots, and open the pull request. Ask the author before changing what
+  the page shows.
+
+Artifact rules LakeBoard doesn't enforce (lists of allowed values, patterns) are noted in the SQL and `IMPORT.md`:
+parameters are bound with their type, so a value can't change the query, but any value of that type is accepted.
 ## Prototyping in another tool
 
 The preferred route is to generate the dashboard directly in the repository against the `dash` and `kit` APIs

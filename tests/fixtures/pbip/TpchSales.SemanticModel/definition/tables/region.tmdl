@@ -1,0 +1,25 @@
+table region
+	lineageTag: 6c2a0b11-0000-4000-8000-000000000005
+
+	column r_regionkey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: r_regionkey
+
+	column r_name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: r_name
+
+	partition region = m
+		mode: import
+		source =
+				let
+					Source = Databricks.Catalogs(DatabricksHost, DatabricksHttpPath, null),
+					samples_Database = Source{[Name="samples",Kind="Database"]}[Data],
+					tpch_Schema = samples_Database{[Name="tpch",Kind="Schema"]}[Data],
+					region_Table = tpch_Schema{[Name="region",Kind="Table"]}[Data]
+				in
+					region_Table
+

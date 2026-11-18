@@ -1,0 +1,48 @@
+/// One row per order line. SYNTHETIC fixture over samples.tpch.lineitem.
+table lineitem
+	isHidden
+	lineageTag: 6c2a0b11-0000-4000-8000-000000000002
+
+	measure 'Net Line Revenue' = SUMX(lineitem, lineitem[l_extendedprice] * (1 - lineitem[l_discount]))
+		formatString: #,##0.00
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000111
+
+	measure 'Shipped Revenue' = CALCULATE([Net Line Revenue], USERELATIONSHIP(lineitem[l_shipdate], 'Date'[Date]))
+		formatString: #,##0.00
+		lineageTag: 6c2a0b11-0000-4000-8000-000000000112
+
+	column l_orderkey
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: l_orderkey
+
+	column l_quantity
+		dataType: decimal
+		summarizeBy: sum
+		sourceColumn: l_quantity
+
+	column l_extendedprice
+		dataType: decimal
+		summarizeBy: sum
+		sourceColumn: l_extendedprice
+
+	column l_discount
+		dataType: decimal
+		summarizeBy: none
+		sourceColumn: l_discount
+
+	column l_shipdate
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: l_shipdate
+
+	partition lineitem = m
+		mode: directQuery
+		source =
+				let
+					Source = Databricks.Catalogs(DatabricksHost, DatabricksHttpPath, [Catalog="samples", Database="tpch"]),
+					lineitem_Table = Source{[Name="samples",Kind="Database"]}[Data]{[Name="tpch",Kind="Schema"]}[Data]{[Name="lineitem",Kind="Table"]}[Data]
+				in
+					lineitem_Table
+

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.4.0/schema.json",
+  "name": "nationBars",
+  "position": { "x": 20, "y": 160, "z": 0, "width": 500, "height": 500 },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": { "Column": { "Expression": { "SourceRef": { "Entity": "nation" } }, "Property": "n_name" } },
+              "queryRef": "nation.n_name",
+              "nativeQueryRef": "n_name",
+              "displayName": "Nation",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "orders" } }, "Property": "Revenue" } },
+              "queryRef": "orders.Revenue",
+              "nativeQueryRef": "Revenue"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [ { "properties": { "text": { "expr": { "Literal": { "Value": "'Revenue by nation'" } } } } } ]
+    }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "topNations000000001",
+        "field": { "Column": { "Expression": { "SourceRef": { "Entity": "nation" } }, "Property": "n_name" } },
+        "type": "TopN"
+      }
+    ]
+  }
+}

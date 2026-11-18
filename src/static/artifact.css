@@ -1,0 +1,56 @@
+/* Claude Dashboard artifact pages (`page: artifact`; decision 0011). Loaded only for those pages, after shell.css.
+ *
+ * An artifact relies on a fixed set of design tokens. The colour tokens (--color-*, --cds-chart-*, --cds-surface-*,
+ * --cds-border, --cds-shadow-popover, --cds-text-secondary, --font-anthropic-*) are LakeBoard's own values, set in
+ * the theme block at the top of shell.css, so they follow the portal's brand and dark mode. The type, spacing and
+ * motion tokens below don't change with the theme. These are LakeBoard's definitions, mapped to its own look. */
+:root {
+  --cds-font-size-caption: 12px;
+  --cds-font-size-body: 14px;
+  --cds-font-size-heading: 17px;
+  --cds-font-size-title: 22px;
+  --cds-font-weight-medium: 600;
+  --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 12px; --cds-gap-lg: 16px; --cds-gap-xl: 24px;
+  --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 16px; --cds-pad-xl: 24px;
+  --cds-radius: 0;  /* the portal draws square corners */
+}
+
+/* The page's frame. A page can set --dash-gutter: 0 on #dash-root to run edge to edge. */
+#dash-root {
+  --dash-gutter: 16px;
+  padding: var(--dash-gutter);
+  color: var(--color-fg);
+  font-family: var(--font-anthropic-sans);
+  font-size: var(--cds-font-size-body);
+  line-height: 1.5;
+  min-width: 0;
+}
+@media (max-width: 599px) { #dash-root { --dash-gutter: 12px; } }
+
+/* Placeholder while data loads. */
+#dash-root .dash-skeleton {
+  display: block; min-height: 1em; border-radius: var(--cds-radius); color: transparent;
+  background: linear-gradient(90deg, var(--color-border-line) 25%, var(--color-panel) 50%, var(--color-border-line) 75%);
+  background-size: 200% 100%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #dash-root .dash-skeleton { animation: dash-skeleton 1.4s ease-in-out infinite; }
+}
+@keyframes dash-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* A styled <select> for filters. */
+#dash-root select.dash-select {
+  font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background-color: var(--color-panel);
+  border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 5px 28px 5px 8px; min-width: 8rem;
+  max-width: 100%; appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-fg-muted) 50%), linear-gradient(135deg, var(--color-fg-muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52%;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+#dash-root select.dash-select:hover { border-color: var(--brand); }
+
+/* Load states the runtime sets on marked elements (data-source) and on #dash-root. Pages may style them further. */
+#dash-root [data-dash-source-state="refreshing"], #dash-root [data-dash-source-state="stale"] { opacity: .65; }
+@media (prefers-reduced-motion: no-preference) {
+  #dash-root [data-source] { transition: opacity var(--cds-dur-slow) var(--cds-ease-out); }
+}

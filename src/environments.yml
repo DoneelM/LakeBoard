@@ -24,7 +24,12 @@ catalogs:
 static_catalogs: [samples]
 
 # Sections of the left navigation, in display order. A dashboard picks one with `section:` in dashboard.yml.
-sections: [Samples, Travel, Retail, Climate, Finance, Operations, Other]
+sections: [Samples, Travel, Retail, Climate, Finance, Operations, Other, Drafts]
+
+# Who may open a dashboard marked `status: draft` in dashboard.yml (for example a Claude artifact just imported),
+# besides the groups the dashboard itself lists under `groups`. `lakeboard-admins` is a placeholder: use your own
+# workspace group. Local runs (scripts/run_local.*) show drafts to the person running them.
+drafts_groups: [lakeboard-admins]
 
 # The name and logo in the left navigation and the browser tab. `logo` is a path under /static (put your file in
 # src/static/brand) or an https URL on one of the image_hosts below. Pages can show it with {{LOGO}}.
