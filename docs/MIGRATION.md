@@ -1,7 +1,8 @@
 # Moving a report from Power BI
 
 The aim is that people open the portal and find the same reports, in the same order, working faster. Each
-report goes through the same six steps.
+report goes through the same six steps. Coding agents follow [DASHBOARD_WORKFLOW.md](DASHBOARD_WORKFLOW.md)
+alongside this migration checklist, regardless of the tool used to build the replacement.
 
 ## 1. Find out who uses it
 

@@ -49,7 +49,13 @@ A dashboard folder is self-contained, so one could move to its own app by copyin
 `src/static/` files. The catalog mapping is in `src/environments.yml`. A change to this decision needs a new record
 that supersedes this one.
 
+## Agent-independent authoring
+
+The authoring workflow is now shared across coding agents, with optional adaptation of external prototypes.
+See [0011](0011-agent-independent-dashboard-authoring.md). The dashboard folder and hosting runtime stay the same.
+
 ## Links
+
 - [DESIGN.md](../DESIGN.md), [AUTHORING.md](../AUTHORING.md), [PROMOTION.md](../PROMOTION.md) "Switching a
   dashboard on per environment"
 - `src/portal/settings.py` (`localise_sql`), `src/portal/registry.py`, `scripts/check.py`,

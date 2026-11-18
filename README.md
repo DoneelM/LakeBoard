@@ -5,12 +5,34 @@
 LakeBoard is one Databricks App that hosts many dashboards. Each dashboard is a plain folder under
 `src/dashboards/`: a small manifest, a few SQL files and one HTML page. Folders are reviewed by pull request and
 deployed to dev, test and prod like any other code. That makes it a practical way to retire Power BI reports one
-folder at a time, and it means AI agents such as Claude can write a whole dashboard, because there is nothing to
-click through. Queries run as the person viewing the page, so Unity Catalog permissions, row filters and column
+folder at a time. Claude Code, Codex and other coding agents can write a whole dashboard against the same
+documented contract. Queries run as the person viewing the page, so Unity Catalog permissions, row filters and column
 masks apply as they are. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that
 answers questions with the viewer's own access.
 
-![City Trips, one of the sample dashboards: KPI tiles, trips per day, a day-by-hour heatmap and the busiest ZIP codes](docs/images/city-trips.png)
+![City Trips in the running app's dark theme: KPI tiles, trips per day and a day-by-hour heatmap](docs/images/city-trips.jpg)
+
+## From Power BI to LakeBoard
+
+For Power BI migrations, the intended end-to-end architecture shares reviewed business metrics between
+dashboards and natural-language analytics:
+
+```mermaid
+flowchart TD
+    P[Power BI project in Git] --> A[Agent-assisted migration]
+    A --> M[Reviewed Unity Catalog metric views]
+    A --> D[LakeBoard dashboard folders]
+    M --> D
+    M --> G[Curated Genie Agents]
+    D --> L[One LakeBoard app per environment]
+    G --> L
+```
+
+Metric views and Genie Agents are reviewed and provisioned separately. LakeBoard currently scaffolds and
+validates dashboard folders and connects them to existing Genie Agents; automatic semantic-model conversion
+and provisioning are not included in this repository. Follow the [migration guide](docs/MIGRATION.md) to map
+and reconcile an existing report. New dashboards can start directly from approved Databricks data using the
+[shared authoring workflow](docs/DASHBOARD_WORKFLOW.md).
 
 ## Quickstart (about 10 minutes)
 
@@ -29,14 +51,14 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
 | [World Weather](src/dashboards/world-weather/) | `samples.accuweather` | Observed weather and a 15-day forecast for 50 cities, on a temperature map |
 
 <p>
-  <img src="docs/images/sales-margin.png" width="49%" alt="Sales &amp; Margin: revenue, discount and margin KPIs against the year before, a monthly trend and a region table">
-  <img src="docs/images/bakery-franchises.png" width="49%" alt="Bakery Franchises: sales KPIs and a world map of franchises sized by revenue">
+  <img src="docs/images/sales-margin.jpg" width="49%" alt="Sales &amp; Margin in dark mode: revenue, discount and margin KPIs against the year before, and a monthly trend">
+  <img src="docs/images/bakery-franchises.jpg" width="49%" alt="Bakery Franchises in dark mode: sales KPIs and a world map of franchises sized by revenue">
 </p>
 <p>
-  <img src="docs/images/travel-marketplace.png" width="49%" alt="Travel Marketplace: booking KPIs, a world map of destinations sized by revenue and the top destinations">
-  <img src="docs/images/guest-experience.png" width="49%" alt="Guest Experience: review and support-chat KPIs, reviews per month and the star distribution">
-  <img src="docs/images/omnichannel-retail.png" width="49%" alt="Omnichannel Retail: sales KPIs against the year before, monthly sales by channel and the channel mix">
-  <img src="docs/images/world-weather.png" width="49%" alt="World Weather: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
+  <img src="docs/images/travel-marketplace.jpg" width="49%" alt="Travel Marketplace in dark mode: booking KPIs, a world map of destinations sized by revenue and the top destinations">
+  <img src="docs/images/guest-experience.jpg" width="49%" alt="Guest Experience in dark mode: review and support-chat KPIs, reviews per month and the star distribution">
+  <img src="docs/images/omnichannel-retail.jpg" width="49%" alt="Omnichannel Retail in dark mode: sales KPIs against the year before, monthly sales by channel and the channel mix">
+  <img src="docs/images/world-weather.jpg" width="49%" alt="World Weather in dark mode: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
 </p>
 
 **1. Sign in with the Databricks CLI** (a recent version; `databricks --version`):
@@ -90,6 +112,33 @@ python scripts/check.py --static && python -m pytest -q
 Add your catalogs under `catalogs:` in `src/environments.yml`, then follow [docs/AUTHORING.md](docs/AUTHORING.md).
 To hide the samples, delete their folders or set `environments: [dev]` in their `dashboard.yml`.
 
+## Create dashboards with your coding agent
+
+Open this repository in Claude Code, Codex, Cursor or another coding tool. The shared instructions are in
+[AGENTS.md](AGENTS.md) and [docs/DASHBOARD_WORKFLOW.md](docs/DASHBOARD_WORKFLOW.md). Claude Code's
+`CLAUDE.md` and `new-dashboard` skill point to those same instructions. Codex reads `AGENTS.md`; for another
+tool, explicitly ask it to read that file if it does not discover repository instructions itself.
+
+For example:
+
+```text
+Read AGENTS.md and follow docs/DASHBOARD_WORKFLOW.md to build a LakeBoard dashboard.
+Use docs/AUTHORING.md for the APIs and City Trips as the example.
+The dashboard should answer [question] for [audience], using [approved data].
+The owning team is [team], the section is [section], and allowed viewers are [groups].
+Use connected Databricks Genie One MCP tools, if available, to clarify sources and metric definitions.
+Return the dashboard folder, validation results and anything still unverified.
+```
+
+Business users can describe a dashboard to their agent, explore approved data through Databricks Genie One MCP,
+and hand the generated folder to the data team for review and hosting. See [Build your own dashboard](docs/BUSINESS_AUTHORS.md)
+for the brief and handoff. No separate app is needed for each report.
+
+The hosting format is a manifest, SQL and HTML/CSS/JavaScript using LakeBoard's `dash` and `kit` APIs. Direct
+repository authoring is the simplest route; other tools' previews can be adapted to that contract. Serving the
+dashboard does not require the agent or model that authored it. Databricks Genie One MCP is used during authoring;
+the optional in-dashboard Ask Genie integration uses a curated Genie agent and is configured separately.
+
 ## Features
 
 - **One app, many dashboards.** One Databricks App (FastAPI) and one deploy, a left navigation with sections, and a
@@ -125,6 +174,25 @@ To hide the samples, delete their folders or set `environments: [dev]` in their 
 | Migrate a Power BI report | Data team | Claude Code reads the Power BI project and writes the dashboard folder directly ([docs/MIGRATION.md](docs/MIGRATION.md)) |
 | Host a dashboard built in Claude | Business users, then the data team | Share the Claude dashboard; Claude Code imports it as a draft, wires its data to Unity Catalog and reconciles it ([docs/AUTHORING.md](docs/AUTHORING.md)) |
 
+## Data freshness
+
+Click **Data as of …** beside **Refresh data** to see when each dataset was fetched, when its cached copy
+expires, how it is shared, and what is known about its source tables. In this example, the built-in sample data
+never changes, so the panel explains why refreshing would return the same data.
+
+<img src="docs/images/refresh-details.jpg" width="510" alt="City Trips freshness details: fetch time, cache expiry, sharing mode and the expanded samples.nyctaxi.trips source table, beside the Refresh data button">
+
+## Phone layout
+
+The same City Trips dashboard at a 390 × 844 browser viewport: the navigation collapses into a drawer,
+KPI tiles wrap into two columns, and charts stack below the filters.
+
+<img src="docs/images/city-trips-mobile.jpg" width="320" alt="City Trips at phone width with collapsed navigation, date filters, two-column KPI tiles and a full-width trips-per-day chart">
+
+This is a phone-width browser preview. Databricks also documents access to Databricks Apps through the
+[Genie mobile app](https://docs.databricks.com/aws/en/genie-one/mobile); testing LakeBoard inside that native
+app is separate from the responsive layout shown here.
+
 ## Why not AI/BI dashboards, Streamlit or Evidence?
 
 They are all good tools, and often the better choice.
@@ -158,6 +226,8 @@ The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them
 | Document | For |
 |---|---|
 | [docs/DESIGN.md](docs/DESIGN.md) | How the portal works and why |
+| [docs/DASHBOARD_WORKFLOW.md](docs/DASHBOARD_WORKFLOW.md) | Shared creation and migration workflow for all coding agents |
+| [docs/BUSINESS_AUTHORS.md](docs/BUSINESS_AUTHORS.md) | Building with a coding agent and Databricks Genie One MCP, then handing off for hosting |
 | [docs/AUTHORING.md](docs/AUTHORING.md) | Adding a dashboard: the contract, the page kit, the checks |
 | [docs/PROMOTION.md](docs/PROMOTION.md) | Moving a change through dev, test and prod |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Moving a report from Power BI, including who uses it today |
