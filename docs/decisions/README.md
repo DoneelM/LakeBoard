@@ -60,3 +60,4 @@ this repository.
 | [0012](0011-agent-independent-dashboard-authoring.md) | Agent-independent dashboard authoring | In progress |
 | [0013](0013-platform-reliability.md) | Shared access, warm policy and honest freshness | Accepted |
 | [0014](0014-travel-operations-showcase.md) | Travel Operations personal showcase | Accepted |
+| [0015](0015-review-deployed-apps.md) | Review deployed apps | Accepted |

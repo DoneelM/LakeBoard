@@ -26,9 +26,10 @@ Two example pipelines do all three, so pick the one for your git host:
 1. **Branch from `main`**, not from `develop`: `git switch -c feature/<name> origin/main`.
 2. Build and check locally ([AUTHORING.md](AUTHORING.md)).
 3. **PR the feature branch into `develop`.** The pipeline runs the checks. Merging deploys to dev.
-4. Test in dev. Start the app if it is stopped (see [OPERATIONS.md](OPERATIONS.md)).
+4. Test in dev. Start the app if it is stopped, then [review the deployment](OPERATIONS.md#review-a-deployment),
+   including a dashboard smoke test, Security, and Insights system metrics.
 5. **PR the same feature branch into `release`.** Merging deploys to test. The business owner signs off here.
-6. **PR the same feature branch into `main`.** Merging deploys to prod.
+6. **PR the same feature branch into `main`.** Merging deploys to prod. Review the active prod deployment after rollout.
 
 Because the same branch is merged three times, each environment gets identical commits and nothing needs
 cherry-picking. A merge only applies that branch's own changes, so other people's unfinished work on `develop`

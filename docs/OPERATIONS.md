@@ -244,6 +244,44 @@ switched off for this environment (`hidden`). A broken dashboard is left out of 
 working. The reason is in the app log. (`/healthz` still works when you run the app locally, but once deployed the
 Databricks Apps proxy answers that path itself with an empty page, so use `/api/health`.)
 
+## Review a deployment
+
+Record the revision and active deployment ID after starting the app and before any scheduled stop. Run this
+read-only check with the intended workspace profile and a recent Databricks SDK that supports app scan findings.
+The caller needs `CAN USE` for the health request and `CAN MANAGE` to read scan findings.
+
+```bash
+python scripts/review_app.py --profile <profile> --app <app-name> --env <environment> \
+  --deployment <active-deployment-id>
+# To confirm a particular finding no longer appears, also pass --tracked-rule <scanner-rule-id>.
+```
+
+1. **Health and smoke test.** Confirm the environment and the dashboard count. Open at least one changed
+   dashboard with its intended viewer identity and check live data, filters, drill-down and freshness. Record
+   first-load and repeat-load times separately for the actions users care about.
+2. **Security.** Match the Security tab's code version to the active deployment, and review new and existing
+   findings. Unavailable, incomplete, unrecorded and skipped scans have unknown coverage. An empty findings list
+   with one of those statuses cannot verify a fix. Record the result and follow up on the next deployment with
+   source changes. A tracked finding still counts as detected if it was ignored or marked resolved. Keep a
+   source review and regression test for the fix and leave triage decisions to the app owner.
+3. **Insights.** Record the time window and traffic alongside availability and service health. In **System
+   metrics**, compare requests by HTTP status, p50/p95/p99 latency, CPU versus its limit, and memory versus its
+   limit. Where available, show deployment markers to correlate changes with the release. Mark missing series or
+   sparse traffic in the review. Keep personal viewer details and raw workspace metrics out of the public repo.
+
+| Observation | Recommended follow-up |
+|---|---|
+| First loads slow down while CPU and memory have headroom | Compare cold and warm requests. Check warehouse startup, query history and cache or permission probes before changing app compute. |
+| CPU stays near its limit at normal traffic | Profile the slow routes and remeasure on representative traffic before resizing. |
+| Memory grows toward its limit | Inspect result sizes and in-process caches. Compare working set before and after peak traffic and review cache TTLs and row caps. |
+| Unexpected 401/403 or recurring 5xx | Check the affected route and time window. Separate expected identity or access denials from app errors and check runtime logs. |
+| App availability dips while service health stays high | Compare incident times with deployments, app starts/stops and runtime logs before assigning a cause. |
+
+The script returns nonzero for unhealthy or unverified deployments, open critical findings, or a present tracked
+rule. It reports its health request's HTTP duration. Use the Insights UI for the platform's system metrics and
+the dashboard smoke test for user-facing latency. See [Databricks security scanning](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/security-scanning)
+and [Databricks Apps monitoring](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/monitor).
+
 ## When something goes wrong
 
 | Symptom | Likely cause |
