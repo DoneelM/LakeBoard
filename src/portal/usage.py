@@ -29,7 +29,7 @@ _guard = threading.Lock()
 
 def table_for(env: str) -> str | None:
     name = USAGE_TABLES.get(env)
-    if name and not TABLE_NAME_RE.match(name):
+    if name and not TABLE_NAME_RE.fullmatch(name):
         raise ValueError(f"usage_table for {env} must be catalog.schema.table, got {name!r}")
     return name
 
@@ -44,12 +44,16 @@ def record(event: str, env: str, user_email: str, dashboard: str | None = None) 
 
 
 def _insert(client, warehouse_id: str, table: str, rows: list[tuple]) -> None:
-    params, values = [], []
+    if not TABLE_NAME_RE.fullmatch(table):
+        raise ValueError("Usage table must be a catalog.schema.table name")
+    params = [StatementParameterListItem(name="usage_table", type="STRING", value=table)]
+    values = []
     for i, row in enumerate(rows):
         values.append("(" + ", ".join(f":{c}{i}" for c in COLUMNS) + ")")
         for col, value in zip(COLUMNS, row):
             params.append(StatementParameterListItem(name=f"{col}{i}", type="TIMESTAMP" if col == "event_time" else "STRING", value=value))
-    sql = f"INSERT INTO {table} ({', '.join(COLUMNS)}) VALUES " + ", ".join(values)
+    # Only the fixed column list and generated parameter markers build SQL text.
+    sql = "INSERT INTO IDENTIFIER(:usage_table) (" + ", ".join(COLUMNS) + ") VALUES " + ", ".join(values)
     r = client.statement_execution.execute_statement(statement=sql, warehouse_id=warehouse_id, parameters=params, wait_timeout="50s")
     deadline = time.time() + 120
     while r.status.state in (StatementState.PENDING, StatementState.RUNNING) and time.time() < deadline:

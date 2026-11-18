@@ -142,10 +142,18 @@ def test_usage_rows_are_batched_with_bound_values(monkeypatch):
 
     monkeypatch.setattr(usage, "USAGE_TABLES", {"prod": "main.governance.lakeboard_usage"})
     usage._insert(Client, "wh", "main.governance.lakeboard_usage",
-                  [("2026-11-10 01:00:00", "view", "prod", "city-trips", "someone@example.com"), ("2026-11-10 01:00:05", "home", "prod", None, "b'; DROP TABLE x --")])
+                  [("2026-11-10 01:00:00", "view", "prod", "city-trips", "someone@example.com"), ("2026-11-10 01:00:05", "home", "prod", None, "o'neill@example.com")])
     call = Client.statement_execution.calls[0]
-    assert call["statement"].count("(:event_time") == 2 and "DROP" not in call["statement"]
-    assert len(call["parameters"]) == 10
+    assert call["statement"].startswith("INSERT INTO IDENTIFIER(:usage_table)")
+    assert call["statement"].count("(:event_time") == 2
+    assert "main.governance.lakeboard_usage" not in call["statement"] and "o'neill" not in call["statement"]
+    params = {p.name: p for p in call["parameters"]}
+    assert len(params) == 11
+    assert (params["usage_table"].type, params["usage_table"].value) == ("STRING", "main.governance.lakeboard_usage")
+    assert params["user_email1"].value == "o'neill@example.com" and params["dashboard1"].value is None
+    with pytest.raises(ValueError):
+        usage._insert(Client, "wh", "main.governance.lakeboard_usage\n", [])
+    assert len(Client.statement_execution.calls) == 1
     assert usage.table_for("prod") == "main.governance.lakeboard_usage" and usage.table_for("dev") is None
     monkeypatch.setattr(usage, "USAGE_TABLES", {"prod": "not a table"})
     with pytest.raises(ValueError):
