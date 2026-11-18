@@ -316,7 +316,7 @@
     const through=latest(rows,'last_check_in');
     document.getElementById('to-coverage').replaceChildren(h('strong',null,`Public sample snapshot · ${dash.params().year}`),
       h('span',null,through?'Bookings through '+fmt.date(through):'No bookings in this reporting year'),
-      h('span',{class:'to-muted'},state.destination?(rows[0]?.destination||'No destination'):state.mine?'Saved destinations':'All selected destinations'));
+      h('span',{class:'to-muted'},state.destination?(rows[0]?.destination||'No destination'):[state.country,state.mine?'Saved destinations':''].filter(Boolean).join(' · ')||'All destinations'));
     if(!rows.length)return;
     if(state.tab==='overview') {
       document.getElementById('to-map-state').replaceChildren();
