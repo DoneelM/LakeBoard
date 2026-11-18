@@ -74,8 +74,8 @@ def view(*deps, updated=1):
 
 
 def table(ms):
-    from databricks.sdk.service.catalog import TableInfo, TableType
-    return TableInfo(table_type=TableType.MANAGED, updated_at=ms)
+    from databricks.sdk.service.catalog import DataSourceFormat, TableInfo, TableType
+    return TableInfo(table_type=TableType.MANAGED, updated_at=ms, data_source_format=DataSourceFormat.DELTA)
 
 
 def foreign(fmt="SNOWFLAKE_FORMAT"):
@@ -477,7 +477,8 @@ def api(monkeypatch, sources, tmp_path):
         "main_prod.ops.secret_vw": table(1),
     })
     monkeypatch.setattr(portal_app, "app_client", lambda: workspace(tables))
-    monkeypatch.setattr(portal_app.data, "run_sql", lambda client, sql, params: {"columns": ["n"], "rows": [["1"]], "cut": False})
+    monkeypatch.setattr(portal_app.data, "run_sql", lambda client, sql, params, **kw:
+                        {"columns": ["n"], "rows": [["1"]], "cut": False})
     monkeypatch.setattr(portal_app.data, "_cache", {})
     return TestClient(portal_app.app), tables
 
@@ -492,8 +493,70 @@ def test_dataset_response_has_cache_type_and_expiry(api):
     body = client.get("/api/d/daily-orders/data/orders").json()
     assert body["cache"] == "app" and body["cached"] is False and body["rows"] == [["1"]]
     assert body["expires_at"] == pytest.approx(body["fetched_at"] + 600)
+    assert body["query_started_at"] <= body["fetched_at"]
     again = client.get("/api/d/daily-orders/data/orders").json()
     assert again["cached"] is True and (again["fetched_at"], again["expires_at"]) == (body["fetched_at"], body["expires_at"])
+    assert again["query_started_at"] == body["query_started_at"]
+
+
+def test_conditional_dataset_response_only_omits_a_valid_cached_result(api, monkeypatch):
+    from portal import data
+
+    client, _ = api
+    path = "/api/d/daily-orders/data/orders"
+    first = client.get(path)
+    headers = {"If-None-Match": first.headers["etag"]}
+    same = client.get(path, headers=headers)
+    assert same.status_code == 304 and same.content == b""
+    forced = client.get(path + "?refresh=1", headers=headers)
+    assert forced.status_code == 200 and forced.json()["cached"] is False
+    assert forced.headers["etag"] != first.headers["etag"]
+    monkeypatch.setattr(data, "_cache", {})  # restart, expiry or eviction also requires a result
+    assert client.get(path, headers=headers).json()["cached"] is False
+
+
+def test_refresh_checks_are_scoped_and_bypass_display_cache(api, monkeypatch):
+    import app as portal_app
+
+    client, tables = api
+    datasets = portal_app.LIVE["daily-orders"].datasets
+    left = "core.orders.daily_orders"
+    right = "core.orders.order_exceptions"
+    monkeypatch.setattr(datasets["orders"], "sql", f"SELECT * FROM {left}")
+    monkeypatch.setattr(datasets["exceptions"], "sql", f"SELECT * FROM {left} JOIN {right} USING (id)")
+    tables.infos[right] = table(1_795_000_000_000)
+    path = "/api/d/daily-orders/sources"
+    assert client.get(path).status_code == 200  # populate the display cache
+    tables.calls.clear()
+    tables.infos[left] = table(1_796_000_000_000)
+    checks = client.get(path + "?check=orders&check=exceptions&check=secret&check=orders").json()["checks"]
+    assert tables.calls.count(left) == tables.calls.count(right) == 1
+    assert "main_prod.ops.secret_vw" not in tables.calls
+    assert checks == {"orders": 1_796_000_000, "exceptions": 1_796_000_000}
+
+
+@pytest.mark.parametrize("sql,refresh,dynamic_default,expected", [
+    ("SELECT * FROM samples.tpch.orders", "changed", False, 0),
+    ("SELECT * FROM samples.tpch.orders", "always", False, None),
+    ("SELECT * FROM samples.tpch.orders WHERE x <= current_date()", "changed", False, None),
+    ("SELECT * FROM samples.tpch.orders WHERE x <= :date", "changed", True, None),
+    ("SELECT * FROM samples.tpch.orders, core.orders.order_exceptions", "changed", False, None),
+    ("SELECT * FROM main_prod.operations.daily_orders_vw", "changed", False, None),
+    ("SELECT * FROM core.orders.order_exceptions", "changed", False, None),
+])
+def test_refresh_checks_fall_back_for_opaque_sources(api, monkeypatch, sql, refresh, dynamic_default, expected):
+    import app as portal_app
+
+    client, _ = api
+    board = portal_app.LIVE["daily-orders"]
+    ds = board.datasets["orders"]
+    monkeypatch.setattr(ds, "sql", sql)
+    monkeypatch.setattr(ds, "refresh", refresh)
+    if dynamic_default:
+        monkeypatch.setattr(ds, "params", ["date"])
+        monkeypatch.setitem(board.params, "date", {"type": "DATE", "default": "@today"})
+    response = client.get("/api/d/daily-orders/sources?check=orders")
+    assert response.json()["checks"] == {"orders": expected}
 
 
 def test_sources_lists_only_datasets_the_viewer_may_open(api):

@@ -53,6 +53,7 @@ datasets:
       - {date_from: "2016-01-01", date_to: "2016-02-29"}
     warm_at: startup              # optional with warm:; once per process. Default schedule also runs at warm.times
     data_through: latest_day       # optional DATE result column; latest returned date in the freshness panel
+    refresh: always                # optional; rerun on Refresh data if SQL depends on anything beyond table writes
     auth: app                     # optional; read as the portal's service principal, for people with no access to the data themselves. One shared result, no filters; refreshed in the background every cache_ttl minus 5 minutes
     background: false             # optional, with auth: app; load on demand once the result has expired, not kept refreshed
     groups: []                    # optional; restrict just this dataset to some workspace groups
@@ -97,6 +98,7 @@ dashboard's own content. Two libraries are always available:
 | `dash.params()` / `dash.setParams({...})` / `dash.resetParams()` | Read or change SQL parameters. Datasets that use a changed parameter reload |
 | `dash.allowed('id')` | Whether this person may read a group-restricted dataset |
 | `dash.refresh('id')` | Re-run one dataset, ignoring the cache. For a shared dataset the new result is what everyone sees |
+| `dash.refreshChanged()` / `dash.refreshAll()` | Refresh loaded datasets selectively, or force every loaded dataset to rerun |
 | `dash.genieContext(() => ({ Period: 'Year to date', Region: 'North' }))` | Tells Ask Genie what the page is showing. See "Ask Genie" below |
 
 **`kit`: building blocks**, so dashboards look and behave alike. Use these before writing your own.

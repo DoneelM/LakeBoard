@@ -48,32 +48,43 @@ def bind(dashboard: Dashboard, ds: Dataset, raw: dict) -> list[StatementParamete
     return items
 
 
-def run_sql(client: WorkspaceClient, sql: str, params: list[StatementParameterListItem]) -> dict:
+def run_sql(client: WorkspaceClient, sql: str, params: list[StatementParameterListItem], *, dataset: str = "") -> dict:
     if not WAREHOUSE_ID:
         raise QueryError("DATABRICKS_WAREHOUSE_ID is not set")
-    r = client.statement_execution.execute_statement(
-        statement=sql, warehouse_id=WAREHOUSE_ID, parameters=params or None, wait_timeout="30s",
-        disposition=Disposition.INLINE, format=Format.JSON_ARRAY, on_wait_timeout=None,
-    )
-    deadline = time.time() + QUERY_TIMEOUT
-    while r.status.state in (StatementState.PENDING, StatementState.RUNNING):
-        if time.time() > deadline:
-            client.statement_execution.cancel_execution(r.statement_id)
-            raise QueryError(f"Query took longer than {QUERY_TIMEOUT // 60} minutes and was stopped")
-        time.sleep(2)
-        r = client.statement_execution.get_statement(r.statement_id)
-    if r.status.state != StatementState.SUCCEEDED:
-        msg = r.status.error.message if r.status.error else str(r.status.state)
-        code = getattr(r.status.error, "error_code", "") if r.status.error else ""
-        raise QueryError(msg, getattr(code, "value", code))
-    columns = [c.name for c in r.manifest.schema.columns]
-    rows = list((r.result and r.result.data_array) or [])
-    chunk = r.result
-    while chunk is not None and chunk.next_chunk_index is not None and len(rows) < MAX_ROWS:
-        chunk = client.statement_execution.get_statement_result_chunk_n(r.statement_id, chunk.next_chunk_index)
-        rows.extend(chunk.data_array or [])
-    cut = len(rows) > MAX_ROWS or bool(r.manifest.truncated)
-    return {"columns": columns, "rows": rows[:MAX_ROWS], "cut": cut}
+    started = time.monotonic()
+    statement_id = None
+    outcome = "failed"
+    try:
+        r = client.statement_execution.execute_statement(
+            statement=sql, warehouse_id=WAREHOUSE_ID, parameters=params or None, wait_timeout="30s",
+            disposition=Disposition.INLINE, format=Format.JSON_ARRAY, on_wait_timeout=None,
+        )
+        statement_id = r.statement_id
+        deadline = time.monotonic() + QUERY_TIMEOUT
+        while r.status.state in (StatementState.PENDING, StatementState.RUNNING):
+            if time.monotonic() > deadline:
+                outcome = "timed_out"
+                client.statement_execution.cancel_execution(statement_id)
+                raise QueryError(f"Query took longer than {QUERY_TIMEOUT // 60} minutes and was stopped")
+            time.sleep(2)
+            r = client.statement_execution.get_statement(statement_id)
+        if r.status.state != StatementState.SUCCEEDED:
+            msg = r.status.error.message if r.status.error else str(r.status.state)
+            code = getattr(r.status.error, "error_code", "") if r.status.error else ""
+            raise QueryError(msg, getattr(code, "value", code))
+        columns = [c.name for c in r.manifest.schema.columns]
+        rows = list((r.result and r.result.data_array) or [])
+        chunk = r.result
+        while chunk is not None and chunk.next_chunk_index is not None and len(rows) < MAX_ROWS:
+            chunk = client.statement_execution.get_statement_result_chunk_n(statement_id, chunk.next_chunk_index)
+            rows.extend(chunk.data_array or [])
+        cut = len(rows) > MAX_ROWS or bool(r.manifest.truncated)
+        outcome = "succeeded"
+        return {"columns": columns, "rows": rows[:MAX_ROWS], "cut": cut}
+    finally:
+        if dataset:
+            log.info("dataset_query dataset=%s statement_id=%s elapsed_ms=%.0f outcome=%s",
+                     dataset, statement_id or "unavailable", (time.monotonic() - started) * 1000, outcome)
 
 
 def cache_key(dashboard: Dashboard, ds: Dataset, who: str, params: list[StatementParameterListItem]) -> str:
@@ -92,10 +103,9 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
         hit = _cache.get(key)
         if hit and not refresh and hit[0] > time.time():
             return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
-        t0 = time.time()
-        payload = run_sql(client, ds.sql, params)
-        log.info("ran %s/%s for %s: %d rows in %.1fs", dashboard.slug, ds.id, who if who in ("app", "shared") else "user",
-                 len(payload["rows"]), time.time() - t0)
+        query_started_at = time.time()
+        payload = {**run_sql(client, ds.sql, params, dataset=f"{dashboard.slug}/{ds.id}"),
+                   "query_started_at": query_started_at}
         now = time.time()
         _cache[key] = (now + ds.cache_ttl, now, payload)
         return {**payload, "fetched_at": now, "expires_at": now + ds.cache_ttl, "cached": False}

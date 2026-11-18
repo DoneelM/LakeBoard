@@ -126,12 +126,17 @@ Notes:
 - Use `cache: shared` only where every viewer may see the same rows. The result one person's query produced is shown to the next.
 - A scheduled warm re-runs the query even if the cached result is still fresh. It replaces the result and restarts the clock.
 
-### The Refresh data button
+### Refresh data and Refresh all
 
-- It is at the top right. It re-runs the datasets the page has loaded so far, ignoring the cache, and stores the new results. (A dataset loads when the page first asks for it. One not asked for yet loads normally when it is.)
-- For `cache: shared` and `auth: app` datasets the new result replaces the shared one, so **everyone** sees it, not just the person who pressed the button. For default datasets it replaces only that person's result.
-- The old data stays on screen, marked as refreshing, until the new data arrives. If the refresh fails, the page shows the error.
-- A refresh runs on the warehouse straight away. A slow dataset takes as long as it did the first time.
+- **Refresh data** checks the sources of datasets the page has already loaded. It reads each distinct source once
+  from fresh Unity Catalog metadata and reruns a dataset's query if any source changed since the query began.
+  It reuses valid results for unchanged direct managed Delta tables and fixed sample data, subject to the existing access checks.
+- If LakeBoard cannot verify every input, it reruns the query. This includes views, external and federated tables,
+  unavailable metadata, time-dependent SQL and datasets configured with `refresh: always`. A missing or expired
+  result also needs a query. For a join, a change on either side reruns the complete dataset query.
+- **Refresh all** bypasses the result cache for every loaded dataset. A dataset the page hasn't asked for yet still loads on demand.
+- A new shared or app-auth result replaces the shared cache entry. A per-viewer result replaces that viewer's entry.
+  The page reports how many results were updated, unchanged or failed.
 - Changing a filter that is sent to SQL reloads only the datasets that use it. They use the cache if it already holds that combination. Other filters work in the browser and run nothing.
 
 ### What the sample dashboards use
@@ -160,6 +165,19 @@ The cache only decides how often the portal asks again. It cannot make data newe
 - A query is stopped after 10 minutes (`PORTAL_QUERY_TIMEOUT`) and returns at most 500,000 rows (`PORTAL_MAX_ROWS`). A result cut at the row limit is flagged to the page.
 - A query that fails shows on the page as "Couldn't load this data" with the reason. A very long request can also time out at the Databricks Apps proxy before the app answers, and the page shows an error then too. Press Refresh to retry. (Nothing in this repo sets or shows the proxy's limit, so no figure is given.)
 - If one slow dataset keeps causing trouble, use `cache: shared` with `warm:` (when everyone may see the same data), raise `cache_ttl`, or build a pre-aggregated table for it.
+
+### Profile a slow dataset
+
+Search the app's application logs for `dataset_query`. Each warehouse execution includes the dashboard and dataset,
+Databricks statement ID when available, elapsed milliseconds and outcome. Elapsed time covers submission, wait and result
+download. Result-cache hits do not generate a query event. The event omits SQL text, parameter values, result rows and
+viewer identity.
+
+Find the statement ID in Databricks SQL Query History and open its Query Profile. Compare scan bytes, file pruning
+and execution time for the same parameters, warehouse and cache conditions, and verify the result still matches.
+Performance Insights can suggest changes such as using the existing report date range to filter a clustering key.
+[Query history](https://docs.databricks.com/aws/en/sql/user/queries/query-history) ·
+[Query performance insights](https://docs.databricks.com/aws/en/sql/user/queries/performance-insights)
 
 ## Usage
 
@@ -192,8 +210,8 @@ Clicking it opens a panel that lists, per dataset: when it was fetched, how long
 how it is cached (your own copy, shared, shared and pre-loaded, or read by the portal), the dataset's `source:`
 note, when its source tables last changed, and (under "Source tables") each table with what is known about it.
 
-- **"· source unchanged"** means no source table has been written since the data was fetched, so Refresh would
-  return the same result. **"· newer data available"** (in green) means a source table changed after the fetch.
+- **"· source unchanged"** means the latest source metadata shows no newer write. **"· newer data available"**
+  (in green) means a tracked source table changed after the fetch. Refresh data checks current metadata before deciding.
 - **Kinds of table.** Managed tables (including materialized views and streaming tables) are timed: "changed 2 h ago
   (10:42 AM)". Federated (Lakehouse Federation, for example Snowflake or Fabric) tables are **live**: each query
   reads the remote system, so the data is current when fetched, but there is no change time. External tables are

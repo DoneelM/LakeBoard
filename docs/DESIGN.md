@@ -162,7 +162,12 @@ views. The portal then enforces it automatically, for every dashboard and for Ge
 
 ## Caching and cost
 - **Cache key:** dashboard, dataset, bound parameters, and the user (or `app`). The TTL comes from the manifest.
-- **Refresh:** the page's Refresh button sends `?refresh=1` to bypass the cache for that user.
+- **Refresh:** Refresh data checks source metadata in one batch for loaded datasets, comparing the timestamps
+  with when each query began. Changed or unverifiable inputs send `?refresh=1`. Unchanged inputs revalidate
+  the same result through the usual access and TTL checks, with a body-free 304 on a matching cache hit.
+  Refresh all bypasses the result cache for every loaded dataset.
+- **Query profiling:** application logs record the Databricks statement ID, outcome and app-side elapsed time
+  for every dataset execution, including background warming. Use the ID to open the query profile.
 - **Background warming:** `auth: app` datasets are re-run every `cache_ttl`, so slow sources (for example a
   federated table that takes minutes to scan) never block a reader. Shared datasets with a `warm:` list are
   refreshed at the `warm.times` in `src/environments.yml`.
