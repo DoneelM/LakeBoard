@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from portal import data, genie, snapshots, sources, usage, xlsx
+from portal import access, data, genie, snapshots, sources, usage, xlsx
 from portal.auth import LOCAL_PROFILE, User, can_open, can_open_dashboard, current_user
 from portal.registry import ASSET_TYPES, Dashboard, load_all
 from portal.settings import (BRAND, DRAFTS_GROUPS, IMAGE_HOSTS, LIBS, LOCALE, SECTIONS, TIMEZONE, WARM, current_env,
@@ -234,11 +234,17 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
     else:
         client, who = user.client, "shared" if ds.shared else user.key
     try:
+        await asyncio.to_thread(access.SHARED_ACCESS.check, d, ds, client, user.key, raw)
         payload = await asyncio.to_thread(data.fetch, d, ds, client, who, raw, bool(refresh))
+    except access.AccessDenied as e:
+        return JSONResponse({"error": str(e)}, status_code=403, headers={"Cache-Control": "private, no-store"})
+    except access.AccessUnavailable as e:
+        return JSONResponse({"error": str(e)}, status_code=502, headers={"Cache-Control": "private, no-store"})
     except data.QueryError as e:
         log.warning("%s/%s failed: %s", slug, dataset_id, e)
         return JSONResponse({"error": str(e)}, status_code=502)
-    return JSONResponse({**payload, "cache": ds.cache_kind}, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse({**payload, "cache": ds.cache_kind, "data_through": data.data_through(ds, payload)},
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/api/d/{slug}/sources")

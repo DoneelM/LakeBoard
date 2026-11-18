@@ -136,9 +136,9 @@ Notes:
 
 ### What the sample dashboards use
 
-All three read sample data that never changes and has no row-level security, so their datasets use
+All sample dashboards read sample data that never changes and has no row-level security, so their datasets use
 `cache: shared` with a long `cache_ttl` (6 to 24 hours). City Trips and Sales & Margin also `warm:` their default
-filters, so the first viewer after a start finds them ready. Each dashboard's `dashboard.yml` says why in a comment.
+filters once per process with `warm_at: startup`, so scheduled warms do not re-query fixed samples. Each dashboard's `dashboard.yml` says why in a comment.
 
 ### Example: a prod weekday
 
@@ -261,3 +261,20 @@ Databricks Apps proxy answers that path itself with an empty page, so use `/api/
 | "Genie couldn't answer that. … INSUFFICIENT_PERMISSIONS …" | The person can use the space but lacks `SELECT` on a view it reads. Grant it in Unity Catalog |
 | "Genie is busy. Try again in a minute." | Genie's per-workspace question limit was reached (HTTP 429) |
 | Genie's numbers differ from the dashboard | The space reads different views or rules from the dashboard. Compare its SQL (Show SQL) with the dashboard's `sql/` files, and fix the space or the `about` text |
+
+
+## Shared-result access and startup policy
+
+Every shared user-auth dataset checks the full bound query as the reader with LIMIT 0, even on a result-cache hit
+or refresh. Allowed checks last five minutes, denied checks one minute. Revoked grants may take five minutes to
+be reflected; source-read failures return 403, and unavailable checks return 502 without cached rows. `auth: app`
+remains the explicit service-principal mode. Use per-viewer caching for viewer-specific row filters or masks.
+
+Set `warm_at: startup` beside a dataset's `warm:` list to preload only once per process. It still requires warming
+to be enabled for that environment (`warm.environments`), and local scripts still disable background warming.
+The default `warm_at: schedule` retains startup plus weekday scheduled runs. Expiry and Refresh still run queries.
+
+The freshness panel puts changed managed tables first, newest first, with counts and a text tag; live and untracked
+sources are separate. It opens changed details automatically and remembers manual open/closed choices.
+Optional `data_through` names a DATE result column and shows the latest returned event day. The fetch time,
+source-write time and event coverage are different facts. Missing coverage is never replaced with today's date.

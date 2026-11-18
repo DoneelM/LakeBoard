@@ -43,3 +43,11 @@ environment first. The scopes are in `resources/portal.app.yml`.
 ## Links
 - [DESIGN.md](../DESIGN.md) "Security model"; [OPERATIONS.md](../OPERATIONS.md) "Access" and "How data refreshes"
 - `src/portal/auth.py`, `src/portal/registry.py`, `resources/portal.app.yml`, `scripts/grant_app_access.py`
+
+
+## Change, 18 November 2026: shared-result authorization
+
+Shared user-auth datasets now analyze the full bound query as the reader before consulting shared results.
+See [0013](0013-platform-reliability.md). This checks access, not row-level equivalence. Use per-viewer caching
+when row filters or masks can differ. Allowed decisions last five minutes; revoked access can therefore take
+that long to be reflected in shared-result requests. `auth: app` remains an explicit exception.

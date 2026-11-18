@@ -51,6 +51,8 @@ datasets:
     cache: shared                 # optional; one result for all viewers. Only for data with no row-level security
     warm:                         # optional, needs cache: shared; pre-loaded at the warm times (src/environments.yml) and once at app start
       - {date_from: "2016-01-01", date_to: "2016-02-29"}
+    warm_at: startup              # optional with warm:; once per process. Default schedule also runs at warm.times
+    data_through: latest_day       # optional DATE result column; latest returned date in the freshness panel
     auth: app                     # optional; read as the portal's service principal, for people with no access to the data themselves. One shared result, no filters; refreshed in the background every cache_ttl minus 5 minutes
     background: false             # optional, with auth: app; load on demand once the result has expired, not kept refreshed
     groups: []                    # optional; restrict just this dataset to some workspace groups
@@ -238,3 +240,12 @@ To adapt an existing prototype:
 
 Claude Dashboard artifacts were the original prototype source and may expose compatible `dash` calls. They
 still need the same checks and adaptation; they are not required to create or host a LakeBoard dashboard.
+
+
+## Shared access and result coverage
+
+Shared user-auth queries are checked as each viewer before a cached result is served. Checks use the full bound
+query with `LIMIT 0`; allow decisions last five minutes and deny decisions one minute. Use shared caching only
+when rows and masks are identical for every viewer. `auth: app` deliberately requires no source access for viewers.
+`data_through: latest_day` names a DATE result column (for example `MAX(event_day) AS latest_day`). The freshness
+panel reports the latest returned date separately from the fetch time. Empty/missing dates remain unknown.

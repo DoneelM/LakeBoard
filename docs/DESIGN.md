@@ -296,3 +296,12 @@ reports. The Power BI activity log shows how each report is consumed, which tell
 - Unity Catalog metric views for shared measures, so dashboards built by different teams use one definition.
 - Pre-built tables for slow sources, so a page loads in seconds instead of waiting on a scan or a federated query.
 - A usage table in Unity Catalog (`usage_table:`, off by default) for adoption reporting beyond the app log.
+
+
+## Reliability additions (decision 0013)
+
+Before accessing shared user-auth results, `portal/access.py` checks the full parameterized query as the reader
+with LIMIT 0, caching short-lived permission decisions independently of result TTL. Failures never fall through
+to shared rows. Row filters and masks still require per-viewer results. `warm_at: startup` avoids scheduled warm
+runs for fixed data. The freshness panel groups changed sources and can show a dataset's actual returned event
+coverage (`data_through`) separately from its fetch time.

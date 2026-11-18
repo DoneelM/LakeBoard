@@ -53,3 +53,5 @@ Run on a serverless SQL warehouse, November 2026 (year 1997):
 | Germany row / `nation_net` in customers | 6,644,487,504.84 / 6,644,487,504.84 |
 
 Each query runs in 2 to 9 seconds on a small serverless warehouse and returns at most 50 rows.
+
+Default warmed datasets use `warm_at: startup`: once per process, in configured warm environments. Expiry and manual Refresh still run queries.
