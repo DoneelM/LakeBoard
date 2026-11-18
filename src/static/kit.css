@@ -26,10 +26,14 @@
 .pn-refresh:hover, .pn-toggle:hover { border-color: var(--brand); }
 .pn-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pn-refresh { flex: none; }
+.pn-refresh-actions { display: flex; gap: 6px; flex: none; position: relative; }
+.pn-refresh:disabled { cursor: progress; opacity: .7; }
+.pn-refresh-status { position: absolute; z-index: 24; top: calc(100% + 6px); right: 0;
+  padding: 6px 10px; white-space: nowrap; background: var(--color-panel); border: 1px solid var(--color-border-line); }
+.pn-refresh-status:empty { padding: 0; border: 0; }
 
 /* ---- Freshness label and panel (dash.js): "Data as of 10:42 am · 12 min ago" beside Refresh data ---- */
 .pn-fresh-wrap { margin-left: auto; position: relative; min-width: 0; display: flex; }
-.pn-fresh-wrap + .pn-refresh { margin-left: 0; }
 .pn-fresh { font: inherit; font-size: 12px; color: var(--color-fg-muted); background: transparent; border: 1px solid transparent; padding: 4px 8px;
   cursor: pointer; border-radius: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%; }
 .pn-fresh:hover, .pn-fresh[aria-expanded="true"] { border-color: var(--color-border-line); color: var(--color-fg); }

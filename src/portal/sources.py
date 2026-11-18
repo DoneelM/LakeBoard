@@ -25,12 +25,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
 
-from .registry import Dataset, tables_in
-from .settings import STATIC_CATALOGS
+from .registry import Dashboard, Dataset, strip_sql_comments_and_strings, tables_in
+from .settings import DATE_TOKENS, STATIC_CATALOGS
 
 log = logging.getLogger("portal.sources")
 TABLE_TTL = 600          # a table's updated_at is re-read after 10 minutes
@@ -38,6 +39,15 @@ VIEW_TTL = 6 * 3600      # what a view reads rarely changes; re-read after 6 hou
 MAX_DEPTH = 5            # view → view → … at most this deep
 MAX_TABLES = 40          # tables visited per dataset reference, to bound the API calls
 TIMEOUT = 10.0           # seconds for the whole /sources request; unresolved tables come back unknown
+# The freshness parser covers plain FROM/JOIN references. Refresh anything with opaque inputs,
+# including quoted identifiers, comma-qualified references, UDFs, and common changing SQL expressions.
+REFRESH_UNCERTAIN = re.compile(
+    r"\b(?:current_(?:date|timestamp|time|catalog|schema|database|user|timezone)"
+    r"|localtimestamp|now|curdate|getdate|getutcdate|sysdate|today|session_user|user|rand|random|randn|uuid"
+    r"|monotonically_increasing_id|spark_partition_id)\b"
+    r"|,\s*\w+\s*\.\s*\w+\s*\.\s*\w+|\b\w+\s*\.\s*\w+\s*\(",
+    re.IGNORECASE,
+)
 VIEW_TYPES = {"VIEW", "METRIC_VIEW"}  # hold no data: followed to the tables they read
 # Tables whose updated_at moves when their data is written ("managed"). FOREIGN (federated) tables are "live": their
 # updated_at is only a metadata sync, but every query reads the remote system. EXTERNAL tables can be written without
@@ -194,16 +204,7 @@ async def for_datasets(datasets: dict[str, Dataset], client, timeout: float = TI
     """{dataset id: {source_note, tables: [{name, kind, updated_at}], source_updated_at, live, partial, no_source,
     static}} within `timeout` seconds."""
     refs = {ds_id: tables_in(ds.sql) for ds_id, ds in datasets.items()}
-    names = sorted({n for ns in refs.values() for n in ns})
-    tasks = {n: asyncio.create_task(asyncio.to_thread(resolve, client, n)) for n in names}
-    if tasks:
-        await asyncio.wait(tasks.values(), timeout=timeout)
-    resolved: dict[str, list[dict]] = {}
-    for n, task in tasks.items():
-        if task.done() and not task.cancelled() and task.exception() is None:
-            resolved[n] = task.result()
-        else:  # still running (it keeps going in its thread and fills the cache for next time) or failed
-            resolved[n] = [_table(n, "unknown")]
+    resolved = await _resolve_all(refs, lambda name: resolve(client, name), timeout)
     out = {}
     for ds_id, ns in refs.items():
         merged: dict[str, dict] = {}
@@ -213,3 +214,54 @@ async def for_datasets(datasets: dict[str, Dataset], client, timeout: float = TI
                     merged[t["name"]] = t
         out[ds_id] = _summary(datasets[ds_id].source, [merged[k] for k in sorted(merged)])
     return out
+
+
+async def _resolve_all(refs: dict[str, list[str]], read, timeout: float) -> dict[str, list[dict]]:
+    names = sorted({name for names in refs.values() for name in names})
+    tasks = {n: asyncio.create_task(asyncio.to_thread(read, n)) for n in names}
+    if tasks:
+        await asyncio.wait(tasks.values(), timeout=timeout)
+    resolved: dict[str, list[dict]] = {}
+    for n, task in tasks.items():
+        if task.done() and not task.cancelled() and task.exception() is None:
+            resolved[n] = task.result()
+        else:  # still running (it keeps going in its thread and fills the cache for next time) or failed
+            resolved[n] = [_table(n, "unknown")]
+    return resolved
+
+
+def _refresh_refs(dashboard: Dashboard, ds: Dataset) -> list[str]:
+    if ds.refresh == "always" or "`" in ds.sql or REFRESH_UNCERTAIN.search(strip_sql_comments_and_strings(ds.sql)):
+        return []
+    if any((dashboard.params.get(name) or {}).get("default") in DATE_TOKENS for name in ds.params):
+        return []
+    return tables_in(ds.sql)
+
+
+def _read_refresh_source(client, name: str) -> list[dict]:
+    if name.split(".")[0] in STATIC_CATALOGS:
+        return [_table(name, "static")]
+    try:
+        info = client.tables.get(name, include_browse=True)
+        table_type = getattr(info.table_type, "value", info.table_type)
+        data_format = getattr(info.data_source_format, "value", info.data_source_format)
+        if table_type == "MANAGED" and data_format == "DELTA" and info.updated_at:
+            return [_table(name, "table", info.updated_at / 1000)]
+    except Exception as exc:
+        _warn_once(name, exc)
+    return [_table(name, "unknown")]
+
+
+async def refresh_checks(dashboard: Dashboard, datasets: dict[str, Dataset], client, timeout: float = TIMEOUT) -> dict:
+    """Read each direct source once, bypassing the display cache. None means a query must run."""
+    refs = {ds_id: _refresh_refs(dashboard, ds) for ds_id, ds in datasets.items()}
+    resolved = await _resolve_all(refs, lambda name: _read_refresh_source(client, name), timeout)
+    checks = {}
+    for ds_id, names in refs.items():
+        tables = [resolved[name][0] for name in names]
+        checks[ds_id] = (
+            max(table["updated_at"] or 0 for table in tables)
+            if tables and all(table["kind"] in ("managed", "static") for table in tables)
+            else None
+        )
+    return checks

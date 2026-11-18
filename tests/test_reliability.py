@@ -98,9 +98,29 @@ def test_route_refuses_cache_hit_and_refresh_before_fetch(monkeypatch):
     monkeypatch.setattr(data, "fetch", lambda *a: pytest.fail("must not consult the shared result cache"))
     client = TestClient(app.app)
     for suffix in ("", "?refresh=1"):
-        r = client.get("/api/d/test/data/x" + suffix)
+        r = client.get("/api/d/test/data/x" + suffix, headers={"If-None-Match": '"123.0"'})
         assert r.status_code == 403 and "rows" not in r.json()
         assert "no-store" in r.headers["cache-control"]
+
+
+def test_failed_dataset_query_logs_statement_without_sql_or_values(monkeypatch, caplog):
+    from types import SimpleNamespace
+
+    from databricks.sdk.service.sql import StatementParameterListItem, StatementState
+
+    reply = SimpleNamespace(
+        statement_id="test-statement", status=SimpleNamespace(
+            state=StatementState.FAILED, error=SimpleNamespace(message="private error", error_code="BAD_REQUEST"),
+        ),
+    )
+    client = SimpleNamespace(statement_execution=SimpleNamespace(execute_statement=lambda **kwargs: reply))
+    monkeypatch.setattr(data, "WAREHOUSE_ID", "test-warehouse")
+    params = [StatementParameterListItem(name="filter", value="private value")]
+    with caplog.at_level("INFO", logger="portal.data"), pytest.raises(data.QueryError):
+        data.run_sql(client, "SELECT :filter", params, dataset="test/x")
+    assert "dataset=test/x statement_id=test-statement elapsed_ms=" in caplog.text
+    assert "outcome=failed" in caplog.text
+    assert all(text not in caplog.text for text in ("SELECT", "private value", "private error"))
 
 
 @pytest.mark.parametrize("auth,shared,todo", [("app", True, False), ("user", False, False), ("user", True, True)])

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -124,14 +124,18 @@ def nav_html(user: User, active: str | None) -> str:
     return "\n".join(out) or '<p class="pn-empty">No dashboards are shared with you yet.</p>'
 
 
-# The freshness label (dash.js fills it in) and the Refresh button. Not on the home page, which has no data.
+# The freshness label and refresh controls. Not shown on the home page.
 REFRESH_HTML = (
     '<div class="pn-fresh-wrap">'
     '<button type="button" class="pn-fresh" id="pn-fresh" aria-expanded="false" aria-controls="pn-fresh-panel" hidden>'
     '<span class="pn-fresh-long"></span><span class="pn-fresh-short"></span></button>'
     '<div class="pn-fresh-panel" id="pn-fresh-panel" role="dialog" aria-label="How fresh this data is" tabindex="-1" hidden></div>'
     '</div>'
-    '<button type="button" class="pn-refresh" onclick="dash.refreshAll()">Refresh data</button>'
+    '<div class="pn-refresh-actions">'
+    '<button type="button" class="pn-refresh" onclick="dash.refreshChanged()">Refresh data</button>'
+    '<button type="button" class="pn-refresh" onclick="dash.refreshAll()">Refresh all</button>'
+    '<span class="pn-refresh-status" id="pn-refresh-status" role="status"></span>'
+    '</div>'
 )
 
 
@@ -243,17 +247,23 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
     except data.QueryError as e:
         log.warning("%s/%s failed: %s", slug, dataset_id, e)
         return JSONResponse({"error": str(e)}, status_code=502)
-    return JSONResponse({**payload, "cache": ds.cache_kind, "data_through": data.data_through(ds, payload)},
-                        headers={"Cache-Control": "private, no-store"})
+    headers = {"Cache-Control": "private, no-store", "ETag": f'"{payload["fetched_at"]}"'}
+    if not refresh and payload["cached"] and request.headers.get("if-none-match") == headers["ETag"]:
+        return Response(status_code=304, headers=headers)
+    return JSONResponse({**payload, "cache": ds.cache_kind, "data_through": data.data_through(ds, payload)}, headers=headers)
 
 
 @app.get("/api/d/{slug}/sources")
-async def dataset_sources(request: Request, slug: str):
-    """When each dataset's source tables last changed (Unity Catalog metadata, read as the app; no SQL is run)."""
+async def dataset_sources(request: Request, slug: str, check: list[str] | None = Query(None)):
+    """Read source metadata as the app. An explicit refresh check bypasses the display metadata cache."""
     d, user = board_for(request, slug)
     allowed = {k: v for k, v in d.datasets.items() if can_open(user, v.groups) and not v.todo}
-    out = await sources.for_datasets(allowed, app_client())
-    return JSONResponse({"datasets": out}, headers={"Cache-Control": "private, no-store"})
+    if check is None:
+        body = {"datasets": await sources.for_datasets(allowed, app_client())}
+    else:
+        requested = {k: allowed[k] for k in set(check) & allowed.keys()}
+        body = {"checks": await sources.refresh_checks(d, requested, app_client())}
+    return JSONResponse(body, headers={"Cache-Control": "private, no-store"})
 
 
 # ---------- Ask Genie (docs/DESIGN.md): always as the viewer, never as the app's service principal ----------

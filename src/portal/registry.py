@@ -106,6 +106,7 @@ class Dataset:
     snapshot: str = ""  # todo only: snapshots/<id>.json, served instead in a local preview run (gitignored)
     warm_at: str = "schedule"  # schedule includes app startup; startup runs once per process
     data_through: str = ""  # optional DATE result column: latest event day present in this result
+    refresh: str = "changed"  # "always" for queries with dependencies beyond their source tables
 
     @property
     def cache_kind(self) -> str:
@@ -291,6 +292,10 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
         if not isinstance(data_through, str) or (data_through and not re.fullmatch(r"[A-Za-z_]\w*", data_through)):
             errors.append(f"dataset {ds_id}: data_through must name a DATE result column")
             data_through = ""
+        refresh = spec.get("refresh", "changed")
+        if refresh not in ("changed", "always"):
+            errors.append(f"dataset {ds_id}: refresh must be changed or always")
+            refresh = "changed"
         datasets[ds_id] = Dataset(
             id=ds_id, title=spec.get("title", ds_id), description=spec.get("description", ""), sql=localise_sql(sql, env),
             params=used, cache_ttl=parse_ttl(spec.get("cache_ttl")), auth=auth, groups=list(spec.get("groups") or []),
@@ -299,6 +304,7 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
             todo=todo, snapshot=snapshot if todo else "",
             warm_at=warm_at,
             data_through=data_through,
+            refresh=refresh,
         )
     page_path = folder / "index.html"
     page = page_path.read_text(encoding="utf-8") if page_path.is_file() else ""

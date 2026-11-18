@@ -89,7 +89,8 @@ def test_shared_cache_serves_every_viewer_from_one_query(make_dashboard, monkeyp
     board = load_dashboard(make_dashboard("store-visits", STORE_VISITS, {"points": POINTS_SQL}))
     assert board.errors == []
     points, calls = board.datasets["points"], []
-    monkeypatch.setattr(data, "run_sql", lambda client, sql, params: calls.append(params) or {"columns": ["n"], "rows": [["1"]], "cut": False})
+    monkeypatch.setattr(data, "run_sql", lambda client, sql, params, **kw: calls.append(params) or
+                        {"columns": ["n"], "rows": [["1"]], "cut": False})
     monkeypatch.setattr(data, "_cache", {})
     assert points.shared and points.warm
     first = data.fetch(board, points, None, "shared", {"region": "East"})
