@@ -45,3 +45,11 @@ Mode and TTL are per dataset in `dashboard.yml`. Warming times, time zone and en
 ## Links
 - [OPERATIONS.md](../OPERATIONS.md) "How data refreshes"; [DESIGN.md](../DESIGN.md) "Caching and cost"
 - `src/portal/data.py`, `src/environments.yml` (`warm:`), `scripts/grant_app_access.py`
+
+
+## Change, 18 November 2026: startup-only warming and reader authorization
+
+`warm_at: startup` with a `warm:` parameter list runs once at process startup, in the configured warm environments.
+The default `warm_at: schedule` preserves startup plus scheduled runs. It does not make data permanent: expiry,
+manual refresh and process restart behave as before. Reader access is checked even for a shared cache hit;
+see [0013](0013-platform-reliability.md).

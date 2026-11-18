@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 import time
+from datetime import date
 
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import Disposition, Format, StatementParameterListItem, StatementState
@@ -26,7 +27,9 @@ _locks_guard = threading.Lock()
 
 
 class QueryError(Exception):
-    pass
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(message)
+        self.code = code
 
 
 def _lock(key: str) -> threading.Lock:
@@ -61,7 +64,8 @@ def run_sql(client: WorkspaceClient, sql: str, params: list[StatementParameterLi
         r = client.statement_execution.get_statement(r.statement_id)
     if r.status.state != StatementState.SUCCEEDED:
         msg = r.status.error.message if r.status.error else str(r.status.state)
-        raise QueryError(msg)
+        code = getattr(r.status.error, "error_code", "") if r.status.error else ""
+        raise QueryError(msg, getattr(code, "value", code))
     columns = [c.name for c in r.manifest.schema.columns]
     rows = list((r.result and r.result.data_array) or [])
     chunk = r.result
@@ -103,6 +107,20 @@ def prune() -> None:
         _cache.pop(k, None)
 
 
+def data_through(ds: Dataset, payload: dict) -> str | None:
+    """Latest valid event date actually returned, separate from when the query was fetched."""
+    if not ds.data_through or ds.data_through not in payload.get("columns", []):
+        return None
+    index = payload["columns"].index(ds.data_through)
+    days = []
+    for row in payload.get("rows", []):
+        try:
+            days.append(date.fromisoformat(str(row[index])).isoformat())
+        except (ValueError, IndexError, TypeError):
+            continue
+    return max(days) if days else None
+
+
 def _warm_slot() -> str | None:
     """The most recent scheduled warm time that has passed today (weekdays only), as 'YYYY-MM-DD HH:MM'."""
     now = now_local()
@@ -137,10 +155,13 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
                     log.warning("warm %s failed: %s", key, e)
                     next_run[key] = time.time() + 900
         slot = _warm_slot()
-        if scheduled and (not started or (slot and slot != last_slot)):  # once at start-up, then at each scheduled time
+        if scheduled and (not started or (slot and slot != last_slot)):
+            startup = not started
             started, last_slot = True, slot
             for d in dashboards.values():
                 for ds in d.datasets.values():
+                    if ds.warm_at == "startup" and not startup:
+                        continue
                     for entry in [] if ds.todo else ds.warm:
                         try:
                             await asyncio.to_thread(fetch, d, ds, app_client_factory(), "shared", entry, True)

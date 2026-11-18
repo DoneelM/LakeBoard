@@ -104,6 +104,8 @@ class Dataset:
     source: str = ""  # optional plain-text note on how the source is built, shown in the freshness panel
     todo: bool = False  # not connected yet (e.g. imported from a Claude artifact): never queried, see snapshot
     snapshot: str = ""  # todo only: snapshots/<id>.json, served instead in a local preview run (gitignored)
+    warm_at: str = "schedule"  # schedule includes app startup; startup runs once per process
+    data_through: str = ""  # optional DATE result column: latest event day present in this result
 
     @property
     def cache_kind(self) -> str:
@@ -270,6 +272,11 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
         warm = list(spec.get("warm") or [])
         if warm and cache != "shared":
             errors.append(f"dataset {ds_id}: warm needs cache: shared")
+        warm_at = spec.get("warm_at", "schedule")
+        if warm_at not in ("schedule", "startup"):
+            errors.append(f"dataset {ds_id}: warm_at must be schedule or startup")
+        if "warm_at" in spec and not warm:
+            errors.append(f"dataset {ds_id}: warm_at needs a warm parameter list")
         for entry in warm:
             unknown = [k for k in (entry or {}) if k not in used] if isinstance(entry, dict) else [entry]
             if unknown:
@@ -280,12 +287,18 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
             source = ""
         elif len(source) > SOURCE_MAX_LEN:
             errors.append(f"dataset {ds_id}: source must be at most {SOURCE_MAX_LEN} characters")
+        data_through = spec.get("data_through", "")
+        if not isinstance(data_through, str) or (data_through and not re.fullmatch(r"[A-Za-z_]\w*", data_through)):
+            errors.append(f"dataset {ds_id}: data_through must name a DATE result column")
+            data_through = ""
         datasets[ds_id] = Dataset(
             id=ds_id, title=spec.get("title", ds_id), description=spec.get("description", ""), sql=localise_sql(sql, env),
             params=used, cache_ttl=parse_ttl(spec.get("cache_ttl")), auth=auth, groups=list(spec.get("groups") or []),
             shared=cache == "shared" or auth == "app", warm=[w for w in warm if isinstance(w, dict)],
             background=bool(spec.get("background", True)), source=" ".join(source.split()),
             todo=todo, snapshot=snapshot if todo else "",
+            warm_at=warm_at,
+            data_through=data_through,
         )
     page_path = folder / "index.html"
     page = page_path.read_text(encoding="utf-8") if page_path.is_file() else ""

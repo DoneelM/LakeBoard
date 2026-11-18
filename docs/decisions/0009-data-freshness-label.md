@@ -154,3 +154,13 @@ time ("updated in the last few seconds") would also hide real, frequent loads.
 - [AUTHORING.md, `source:`](../AUTHORING.md)
 - Unity Catalog Tables API, get a table: https://docs.databricks.com/api/workspace/tables/get
 - Unity Catalog privileges (BROWSE): https://docs.databricks.com/aws/en/data-governance/unity-catalog/manage-privileges/privileges
+
+
+## Change, 18 November 2026: explain changed sources and data coverage
+
+Sources are grouped per dataset against its own fetch time: changed managed tables (newest first), unchanged
+managed tables, and live or untracked sources. Changed rows have a text tag and theme-coloured border. Details
+open automatically for changes and retain an explicit reader open/closed choice during periodic rendering.
+Optional `data_through: <DATE result column>` adds the latest valid date returned by that query to the panel.
+Missing dates never fall back to the clock. This is result coverage, not a pipeline-completeness guarantee.
+Historical samples keep their static-source explanation. See [0013](0013-platform-reliability.md).

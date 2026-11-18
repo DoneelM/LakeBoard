@@ -56,6 +56,9 @@
 .pn-fresh-tables ul { margin: 4px 0 0; padding-left: 16px; }
 .pn-fresh-tables li { overflow-wrap: anywhere; }
 .pn-fresh-tname { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.pn-fresh-group { margin: 10px 0 3px; font-size: 12px; }
+.pn-fresh-changed { border-left: 3px solid var(--color-ok); padding-left: 8px; font-weight: 600; }
+.pn-fresh-tag { display: block; color: var(--color-ok); font-size: 11px; }
 .pn-fresh-accent { color: var(--color-ok); font-weight: 600; }
 .pn-fresh-err { color: var(--color-bad); }
 .pn-fresh-foot { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--color-border-line); color: var(--color-fg-muted); font-size: 12px; }

@@ -6,9 +6,10 @@ LakeBoard is one Databricks App that hosts many dashboards. Each dashboard is a 
 `src/dashboards/`: a small manifest, a few SQL files and one HTML page. Folders are reviewed by pull request and
 deployed to dev, test and prod like any other code. That makes it a practical way to retire Power BI reports one
 folder at a time. Claude Code, Codex and other coding agents can write a whole dashboard against the same
-documented contract. Queries run as the person viewing the page, so Unity Catalog permissions, row filters and column
-masks apply as they are. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that
-answers questions with the viewer's own access.
+documented contract. Queries run as the person viewing the page. Per-viewer caching preserves Unity Catalog row
+filters and column masks; opt-in shared caching checks reader access and requires identical results for every
+permitted viewer. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that answers
+questions with the viewer's own access.
 
 ![City Trips in the running app's dark theme: KPI tiles, trips per day and a day-by-hour heatmap](docs/images/city-trips.jpg)
 
@@ -149,8 +150,8 @@ the optional in-dashboard Ask Genie integration uses a curated Genie agent and i
   catalogs, and a check that runs on every pull request.
 - **Dev, test and prod from one branch flow.** SQL is written with prod catalog names and swapped per environment
   (`src/environments.yml`). Example pipelines for GitHub Actions and Azure DevOps.
-- **Caching that fits the data.** Per-viewer or shared results, a time-to-live per dataset, background warming at set
-  times, and datasets read as the app for people who have no access to the source.
+- **Caching that fits the data.** Per-viewer or shared results, reader access checks before shared results, a
+  time-to-live per dataset, startup-only or scheduled warming, and explicit app-auth datasets.
 - **Freshness label.** "Data as of 10:42 am" in the title bar, with a panel showing how each dataset is cached and
   whether the source tables have changed since (from Unity Catalog metadata).
 - **Ask Genie** about a dashboard, with the page's filters sent as context. Answers show the table and the SQL.
@@ -204,7 +205,7 @@ They are all good tools, and often the better choice.
   own compute, and every interaction reruns the script on the server. LakeBoard runs one app for all dashboards and
   draws in the browser.
 - **Evidence** builds static pages from Markdown and SQL, with the data captured at build time. LakeBoard queries live,
-  as each viewer, so row-level security and access changes apply immediately.
+  as each viewer when data is fetched. Cached results follow their configured TTL and access policy.
 
 The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them), and you own a small platform.
 

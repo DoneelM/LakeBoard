@@ -72,11 +72,15 @@
     const qs = new URLSearchParams();
     for (const p of cfg.datasets[id].params || []) if (params[p] != null && params[p] !== '') qs.set(p, params[p]);
     if (refresh) qs.set('refresh', '1');
+    let accessDenied = false;
     try {
       const res = await fetch(`/api/d/${encodeURIComponent(cfg.slug)}/data/${encodeURIComponent(id)}?${qs}`, { credentials: 'same-origin' });
       const body = await res.json().catch(() => ({ error: res.statusText }));
       if (s.key !== key) return; // a newer filter superseded this request
-      if (!res.ok) throw new Error(body.error || body.detail || res.statusText);
+      if (!res.ok) {
+        accessDenied = res.status === 403;
+        throw new Error(body.error || body.detail || res.statusText);
+      }
       const cols = body.columns;
       s.data = body.rows.map((r) => { const o = {}; for (let i = 0; i < cols.length; i++) o[cols[i]] = r[i]; return o; });
       s.data.columns = cols;
@@ -86,13 +90,15 @@
       s.expiresAt = body.expires_at;
       s.cache = body.cache || cfg.datasets[id].cache;
       s.snapshot = !!body.snapshot;
+      s.dataThrough = body.data_through || null;
       s.status = 'ok';
       s.stale = false;
       s.message = '';
     } catch (e) {
       if (s.key !== key) return;
       // An artifact keeps showing the last good data when a refresh fails ("stale"); LakeBoard pages show the error.
-      if (ARTIFACT && had && refresh) { s.status = 'ok'; s.stale = true; } else s.status = 'error';
+      if (ARTIFACT && had && refresh && !accessDenied) { s.status = 'ok'; s.stale = true; } else s.status = 'error';
+      if (accessDenied) { s.data = []; s.columns = []; s.fetchedAt = null; s.stale = false; }
       s.message = String(e.message || e);
       console.error(`dataset ${id} failed:`, s.message);
     } finally {
@@ -276,7 +282,7 @@
     const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
     let sources = null;      // dataset id -> {source_note, tables, source_updated_at, live, partial, no_source, static}, from /sources
     let sourcesAsked = false;
-    const openTables = new Set();  // datasets whose "Source tables" list is open in the panel
+    const openTables = new Map();  // explicit open/closed choices survive periodic panel rendering
 
     const when = (sec) => {  // "10:42 am", or "Mon 16 Nov, 10:42 am" when not today (portal time zone)
       const d = new Date(sec * 1000);
@@ -375,6 +381,7 @@
         const dl = el('dl');
         const add = (k, v) => dl.append(el('dt', null, k), el('dd', null, v));
         add('As of', `${when(s.fetchedAt)} (${ago(s.fetchedAt)})`);
+        if (s.dataThrough) add('Data through', s.dataThrough);
         if (s.expiresAt) add('Kept until', when(s.expiresAt));
         add('Type', (KIND[s.cache || meta.cache] || KIND.user)());
         if (meta.source) add('Source', meta.source);
@@ -394,18 +401,29 @@
         if (src && src.source_updated_at != null && (src.live || src.partial)) {
           box.append(el('p', 'pn-fresh-note', 'Some sources are read live or aren’t tracked; the time shown covers the tracked tables only.'));
         }
-        if (tables.length) {  // each table and what is known about it, folded away by default
+        if (tables.length) {
+          const groups = window.LakeBoardSourceGroups.groupSourceTables(tables, s.fetchedAt);
           const det = el('details', 'pn-fresh-tables');
-          det.open = openTables.has(id);  // the panel re-renders every minute; keep what the reader opened
-          det.addEventListener('toggle', () => { if (det.open) openTables.add(id); else openTables.delete(id); });
-          det.append(el('summary', null, `Source tables (${tables.length})`));
-          const ul = el('ul');
-          for (const t of tables) {
-            const li = el('li');
-            li.append(el('span', 'pn-fresh-tname', t.name), document.createTextNode(` — ${tableKind(t)}`));
-            ul.append(li);
+          det.open = openTables.has(id) ? openTables.get(id) : groups.changed.length > 0;
+          // Initialization can emit toggle too; only remember an actual change from the rendered state.
+          let renderedOpen = det.open;
+          det.addEventListener('toggle', () => {
+            if (det.open !== renderedOpen) openTables.set(id, det.open);
+            renderedOpen = det.open;
+          });
+          det.append(el('summary', null, `Source tables (${tables.length})${groups.changed.length ? ` · ${groups.changed.length} changed since your data` : ''}`));
+          for (const [key, title] of [['changed', 'Changed since your data'], ['unchanged', 'Unchanged'], ['untracked', 'Live or not tracked']]) {
+            if (!groups[key].length) continue;
+            det.append(el('h4', 'pn-fresh-group', `${title} (${groups[key].length})`));
+            const ul = el('ul');
+            for (const t of groups[key]) {
+              const li = el('li', key === 'changed' ? 'pn-fresh-changed' : '');
+              li.append(el('span', 'pn-fresh-tname', t.name), document.createTextNode(` — ${tableKind(t)}`));
+              if (key === 'changed') li.append(el('strong', 'pn-fresh-tag', 'new since your data'));
+              ul.append(li);
+            }
+            det.append(ul);
           }
-          det.append(ul);
           box.append(det);
         }
         panel.append(box);

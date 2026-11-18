@@ -17,6 +17,7 @@ datasets:
     sql: sql/kpis.sql
     cache: shared
     cache_ttl: 24h
+    warm_at: startup
     warm:
       - {year: 1997}
     source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
@@ -26,6 +27,7 @@ datasets:
     sql: sql/trend.sql
     cache: shared
     cache_ttl: 24h
+    warm_at: startup
     warm:
       - {year: 1997}
     source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
@@ -35,6 +37,7 @@ datasets:
     sql: sql/regions.sql
     cache: shared
     cache_ttl: 24h
+    warm_at: startup
     warm:
       - {year: 1997}
     source: "Databricks sample dataset samples.tpch (TPC-H); static, never reloaded"
