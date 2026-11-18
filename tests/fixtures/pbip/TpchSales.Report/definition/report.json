@@ -1,0 +1,47 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/1.0.0/schema.json",
+  "themeCollection": {
+    "baseTheme": {
+      "name": "CY24SU10",
+      "reportVersionAtImport": "5.59",
+      "type": "SharedResources"
+    }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "f0rderStatus000000001",
+        "field": {
+          "Column": {
+            "Expression": { "SourceRef": { "Entity": "orders" } },
+            "Property": "o_orderstatus"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [ { "Name": "o", "Entity": "orders", "Type": 0 } ],
+          "Where": [
+            {
+              "Condition": {
+                "Not": {
+                  "Expression": {
+                    "In": {
+                      "Expressions": [
+                        { "Column": { "Expression": { "SourceRef": { "Source": "o" } }, "Property": "o_orderstatus" } }
+                      ],
+                      "Values": [ [ { "Literal": { "Value": "'P'" } } ] ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "annotations": [
+    { "name": "note", "value": "SYNTHETIC test fixture" }
+  ]
+}

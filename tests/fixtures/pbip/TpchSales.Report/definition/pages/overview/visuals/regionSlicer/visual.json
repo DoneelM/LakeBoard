@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.4.0/schema.json",
+  "name": "regionSlicer",
+  "position": { "x": 320, "y": 20, "z": 2000, "width": 300, "height": 120 },
+  "visual": {
+    "visualType": "slicer",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": { "SourceRef": { "Entity": "region" } },
+                  "Property": "r_name"
+                }
+              },
+              "queryRef": "region.r_name",
+              "nativeQueryRef": "r_name",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "data": [ { "properties": { "mode": { "expr": { "Literal": { "Value": "'Dropdown'" } } } } } ],
+      "general": [
+        {
+          "properties": {
+            "filter": {
+              "filter": {
+                "Version": 2,
+                "From": [ { "Name": "r", "Entity": "region", "Type": 0 } ],
+                "Where": [
+                  {
+                    "Condition": {
+                      "In": {
+                        "Expressions": [
+                          { "Column": { "Expression": { "SourceRef": { "Source": "r" } }, "Property": "r_name" } }
+                        ],
+                        "Values": [ [ { "Literal": { "Value": "'EUROPE'" } } ] ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [ { "properties": { "text": { "expr": { "Literal": { "Value": "'Region'" } } } } } ]
+    }
+  }
+}

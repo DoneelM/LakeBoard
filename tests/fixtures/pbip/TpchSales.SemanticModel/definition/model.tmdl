@@ -1,0 +1,15 @@
+/// SYNTHETIC test fixture modelled on samples.tpch. Not a real report.
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+
+ref table orders
+ref table lineitem
+ref table customer
+ref table nation
+ref table region
+ref table Date
+
+ref role 'Region Managers'
+

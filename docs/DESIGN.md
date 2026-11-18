@@ -65,9 +65,10 @@ src/                           ← app source (bundle source_code_path)
   portal/                      settings.py, registry.py (manifests + rules), data.py (queries + cache), auth.py,
                                genie.py (Ask Genie), sources.py (freshness), usage.py, xlsx.py
   static/                      dash.js (data runtime), kit.js + kit.css (page kit), genie.js + genie.css,
-                               shell.css (theme), vendor/, brand/logo.svg
+                               artifact.js + artifact.css (Claude artifact pages), shell.css (theme), vendor/,
+                               brand/logo.svg
   templates/shell.html         the page frame: left navigation, title bar
-  dashboards/<slug>/           dashboard.yml, index.html, sql/*.sql, README.md
+  dashboards/<slug>/           dashboard.yml, index.html, sql/*.sql, README.md (artifact pages: assets/)
 scripts/                       new_dashboard.py, check.py, run_local.ps1 / run_local.sh, grant_app_access.py,
                                build_sources_map.py, powerbi_usage.py
 tests/                         pytest: every dashboard valid; the rules reject what they should
@@ -108,6 +109,8 @@ switched on), `libs` (extra libraries such as Leaflet), `replaces`, `genie`, and
 - Every table is `catalog.schema.table`, in a catalog listed in `src/environments.yml`.
 - Pages may not load scripts from other sites.
 - `section`, `environments` and `libs` must use values from `src/environments.yml`.
+- `page` is `lakeboard` or `artifact`; `assets/` (artifact pages only) holds flat `.js`, `.css`, image and font
+  files; `status` is `live` or `draft`; `snapshot` needs `todo: true` and a `snapshots/<name>.json` path.
 - A `genie:` block names a 32-character space id per known environment, and is refused alongside `auth: app` data.
 
 ## Environments
@@ -144,6 +147,7 @@ same logo with `{{LOGO}}`. `locale:` sets how numbers and dates are written.
 |---|---|
 | Who can open the app | App permission `CAN USE`, granted to the `viewers_group` in `databricks.yml` (default `lakeboard-users`, a placeholder), plus any groups you add per target |
 | Who sees a dashboard | `groups` in the manifest; the server checks the user's groups on every page and API call |
+| Drafts | `status: draft`: only `drafts_groups` (src/environments.yml) and the dashboard's own `groups` |
 | What data a user sees | `auth: user` (default): the query runs with the user's token, so UC grants, row filters and masks apply |
 | Cache isolation | `auth: user` results are cached **per user**; `auth: app` results are shared, so only use it for data every viewer of that dashboard may see |
 | Part of a dashboard | `groups` on a dataset; the server refuses it to anyone else ([OPERATIONS.md](OPERATIONS.md)) |
@@ -197,7 +201,17 @@ The title bar tells people how old the data on screen is, so they don't press Re
 - **Data:** `data(id)` (lazy fetch, then `{status, data, columns, message, refreshing}`) and `onData(fn)`.
 - **Filters:** `params()`, `setParams()` and `resetParams()`. Changing a parameter that a dataset's SQL uses re-fetches that dataset.
 - **Other:** `allowed(id)`, `env`, `setLink()` (URL hash), `refresh(id)`, `calc()` and `colors`.
-- **Load states:** marks get the same `data-dash-source-state` attributes as in artifacts.
+- **Drawings:** `draw(name, fn | {mount, update, unmount})` runs on `data-draw` elements after the scripts, and
+  on data, filter, page-width or element-width changes; `loader()` reshapes a dataset's rows.
+- **Load states:** marks get the same `data-dash-source-state` attributes as in artifacts (`loading`,
+  `refreshing`, `stale`, `error`, `empty`).
+
+**Claude Dashboard artifacts** (`page: artifact` in `dashboard.yml`, decision 0011) run unchanged. The page is sent
+inert in a `<template>`; `static/artifact.js` mounts it in `#dash-root`, points bare file names at the dashboard's
+`assets/` folder (`/d/<slug>/assets/<name>`), and runs its scripts in order, each in its own function scope.
+`static/artifact.css` adds the type and spacing tokens artifacts expect. `status: draft` hides a dashboard from all
+but `drafts_groups` and its own groups. A dataset marked `todo: true` is never queried; a local run with
+`PORTAL_PREVIEW_SNAPSHOTS=1` serves its gitignored `snapshots/<id>.json` instead.
 
 `kit.js` holds the shared building blocks: formatting, filter bar, KPI tiles, sortable table with CSV download,
 bar and line charts, and a point map. Dashboards use it, which keeps a page to a few hundred lines and makes

@@ -1,0 +1,152 @@
+<meta name="dash-one-writer">
+<link rel="stylesheet" href="theme.css">
+
+<div class="ad-page">
+  <header class="ad-head">
+    <h1>Orders by region</h1>
+    <p>TPC-H sample orders, 1992 to 1997. Pick a region to highlight it and to see its market segments.</p>
+  </header>
+
+  <div class="ad-bar">
+    <div data-draw="region-picker" data-source="yearly"></div>
+    <button type="button" class="ad-toggle" id="ad-toggle" aria-expanded="false" aria-controls="ad-more">Show year by year</button>
+  </div>
+
+  <div class="ad-kpis" data-draw="kpis" data-source="yearly"></div>
+
+  <div class="ad-grid">
+    <section class="ad-card">
+      <h2>Revenue by year</h2>
+      <p>Order revenue per region. The highlighted line is the selected region.</p>
+      <div class="ad-chart" data-draw="trend" data-source="yearly"></div>
+    </section>
+    <section class="ad-card">
+      <h2 id="ad-seg-title">Revenue by market segment</h2>
+      <p>Customer market segments, largest first.</p>
+      <div class="ad-chart" data-draw="segments" data-source="segment_mix"></div>
+    </section>
+  </div>
+
+  <section class="ad-card" id="ad-more" hidden>
+    <h2>Year by year</h2>
+    <div class="ad-wrap" data-draw="year-table" data-source="yearly"></div>
+  </section>
+</div>
+
+<script src="charts.js"></script>
+<script>
+// Each script runs in its own scope: this `fmt` does not clash with the one in charts.js.
+const fmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const money = (v) => '$' + fmt.format(v);
+const { ready, lines, bars } = window.AdCharts;
+const ALL = 'All regions';
+const region = () => dash.params().region || ALL;
+const yearly = () => {
+  const d = dash.data('yearly');
+  return { ...d, data: d.status === 'ok' ? d.data.map((r) => ({ ...r, order_year: +r.order_year, revenue: +r.revenue, orders: +r.orders })) : d.data };
+};
+
+// Segments for the selected region (or all regions), largest first. Reruns when the region changes.
+dash.calc('segment_mix', {
+  inputs: ['segments'],
+  title: 'Segment mix',
+  description: 'Revenue, orders and customers per market segment for the selected region.',
+  fn: (rows) => {
+    const pick = region();
+    const by = d3.rollup(rows.filter((r) => pick === ALL || r.region === pick), (g) => ({
+      revenue: d3.sum(g, (r) => +r.revenue), orders: d3.sum(g, (r) => +r.orders), customers: d3.sum(g, (r) => +r.customers),
+    }), (r) => r.segment);
+    return [...by].map(([segment, v]) => ({ segment, ...v })).sort((a, b) => b.revenue - a.revenue);
+  },
+});
+
+dash.draw('region-picker', {
+  mount(el) {
+    const label = document.createElement('label');
+    label.textContent = 'Region';
+    const select = document.createElement('select');
+    select.className = 'dash-select';
+    select.addEventListener('change', () => {
+      dash.setParams({ region: select.value === ALL ? '' : select.value });
+      dash.setLink(select.value === ALL ? '' : select.value);
+    });
+    label.append(select);
+    el.append(label);
+    return { select };
+  },
+  update(el, { select }) {
+    const d = dash.data('yearly');
+    const names = [ALL, ...new Set((d.data || []).map((r) => r.region))];
+    if (select.options.length !== names.length) {
+      select.replaceChildren(...names.map((n) => new Option(n, n)));
+    }
+    select.value = region();
+    select.disabled = d.status !== 'ok';
+  },
+  unmount() {},
+});
+
+dash.draw('kpis', (el) => {
+  const d = yearly();
+  if (!ready(el, d)) return;
+  const rows = d.data.filter((r) => region() === ALL || r.region === region());
+  const revenue = d3.sum(rows, (r) => r.revenue);
+  const orders = d3.sum(rows, (r) => r.orders);
+  const tiles = [['Revenue', money(revenue)], ['Orders', fmt.format(orders)], ['Average order', money(revenue / orders)],
+    ['Years', `${d3.min(rows, (r) => r.order_year)}–${d3.max(rows, (r) => r.order_year)}`]];
+  el.replaceChildren(...tiles.map(([k, v]) => {
+    const div = document.createElement('div');
+    div.className = 'ad-kpi';
+    div.append(Object.assign(document.createElement('span'), { textContent: k }), Object.assign(document.createElement('strong'), { textContent: v }));
+    return div;
+  }));
+});
+
+dash.draw('trend', (el) => {
+  const d = yearly();
+  if (!ready(el, d)) return;
+  const series = [...d3.group(d.data, (r) => r.region)].map(([key, points]) => ({ key, points }));
+  lines(el, { series, x: 'order_year', y: 'revenue', selected: region() === ALL ? null : region(), yFormat: money });
+});
+
+dash.draw('segments', (el) => {
+  const d = dash.data('segment_mix');
+  document.getElementById('ad-seg-title').textContent = `Revenue by market segment · ${region()}`;
+  if (!ready(el, d)) return;
+  bars(el, { rows: d.data, label: 'segment', value: 'revenue', format: money });
+});
+
+// Only drawn while its section is shown: the runtime skips drawings under a hidden attribute.
+dash.draw('year-table', (el) => {
+  const d = yearly();
+  if (!ready(el, d)) return;
+  const years = [...new Set(d.data.map((r) => r.order_year))].sort();
+  const regions = [...new Set(d.data.map((r) => r.region))];
+  const value = new Map(d.data.map((r) => [`${r.region}|${r.order_year}`, r.revenue]));
+  const table = document.createElement('table');
+  table.className = 'ad-table';
+  table.setAttribute('data-row-key', 'region');
+  const head = table.createTHead().insertRow();
+  for (const h of ['Region', ...years]) head.append(Object.assign(document.createElement('th'), { textContent: h }));
+  const body = table.createTBody();
+  for (const r of regions) {
+    const tr = body.insertRow();
+    tr.setAttribute('data-row', r);
+    tr.insertCell().textContent = r;
+    for (const y of years) tr.insertCell().textContent = money(value.get(`${r}|${y}`) || 0);
+  }
+  el.replaceChildren(table);
+});
+
+const toggle = document.getElementById('ad-toggle');
+toggle.addEventListener('click', () => {
+  const more = document.getElementById('ad-more');
+  more.hidden = !more.hidden;
+  toggle.setAttribute('aria-expanded', String(!more.hidden));
+  toggle.textContent = more.hidden ? 'Show year by year' : 'Hide year by year';
+});
+
+// Open with the region in the link, if there is one (dash.setLink writes it).
+const linked = decodeURIComponent(location.hash.slice(1));
+if (linked) dash.setParams({ region: linked });
+</script>

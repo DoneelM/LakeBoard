@@ -1,0 +1,52 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.4.0/schema.json",
+  "name": "customerTable",
+  "position": { "x": 540, "y": 160, "z": 1000, "width": 700, "height": 500 },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": { "Column": { "Expression": { "SourceRef": { "Entity": "customer" } }, "Property": "c_name" } },
+              "queryRef": "customer.c_name",
+              "nativeQueryRef": "c_name",
+              "displayName": "Customer"
+            },
+            {
+              "field": { "Column": { "Expression": { "SourceRef": { "Entity": "customer" } }, "Property": "c_mktsegment" } },
+              "queryRef": "customer.c_mktsegment",
+              "nativeQueryRef": "c_mktsegment",
+              "displayName": "Segment"
+            },
+            {
+              "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "orders" } }, "Property": "Revenue" } },
+              "queryRef": "orders.Revenue",
+              "nativeQueryRef": "Revenue"
+            },
+            {
+              "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "orders" } }, "Property": "Order Count" } },
+              "queryRef": "orders.Order Count",
+              "nativeQueryRef": "Order Count"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": { "Column": { "Expression": { "SourceRef": { "Entity": "lineitem" } }, "Property": "l_quantity" } },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(lineitem.l_quantity)",
+              "nativeQueryRef": "Sum of l_quantity",
+              "displayName": "Quantity"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [ { "properties": { "text": { "expr": { "Literal": { "Value": "'Customers'" } } } } } ]
+    }
+  }
+}

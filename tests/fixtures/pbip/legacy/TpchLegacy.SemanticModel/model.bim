@@ -1,0 +1,128 @@
+{
+  "compatibilityLevel": 1567,
+  "model": {
+    "culture": "en-US",
+    "description": "SYNTHETIC test fixture modelled on samples.tpch. Not a real report.",
+    "dataAccessOptions": { "legacyRedirects": true, "returnErrorValuesAsNull": true },
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "tables": [
+      {
+        "name": "orders",
+        "columns": [
+          { "name": "o_orderkey", "dataType": "int64", "isHidden": true, "sourceColumn": "o_orderkey", "summarizeBy": "none" },
+          { "name": "o_custkey", "dataType": "int64", "isHidden": true, "sourceColumn": "o_custkey", "summarizeBy": "none" },
+          { "name": "o_totalprice", "dataType": "decimal", "sourceColumn": "o_totalprice" },
+          { "name": "o_orderdate", "dataType": "dateTime", "sourceColumn": "o_orderdate" },
+          { "type": "calculated", "name": "Order Year", "dataType": "int64", "isDataTypeInferred": true, "expression": "YEAR(orders[o_orderdate])" }
+        ],
+        "partitions": [
+          {
+            "name": "orders",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = DatabricksMultiCloud.Catalogs(\"example.cloud.databricks.com\", \"/sql/1.0/warehouses/0000000000000000\", [Catalog=null, Database=null]),",
+                "    samples_Database = Source{[Name=\"samples\",Kind=\"Database\"]}[Data],",
+                "    tpch_Schema = samples_Database{[Name=\"tpch\",Kind=\"Schema\"]}[Data],",
+                "    orders_Table = tpch_Schema{[Name=\"orders\",Kind=\"Table\"]}[Data]",
+                "in",
+                "    orders_Table"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          { "name": "Revenue", "expression": "SUM(orders[o_totalprice])", "formatString": "#,##0.00" },
+          {
+            "name": "Revenue YTD",
+            "expression": [ "", "TOTALYTD([Revenue], orders[o_orderdate], \"06-30\")" ],
+            "formatString": "#,##0.00"
+          },
+          { "name": "Avg Order Value", "expression": "DIVIDE([Revenue], COUNTROWS(orders))", "formatString": "#,##0.00" }
+        ]
+      },
+      {
+        "name": "customer",
+        "columns": [
+          { "name": "C_CUSTKEY", "dataType": "int64", "isHidden": true, "sourceColumn": "C_CUSTKEY" },
+          { "name": "C_NAME", "dataType": "string", "sourceColumn": "C_NAME" },
+          { "name": "C_MKTSEGMENT", "dataType": "string", "sourceColumn": "C_MKTSEGMENT" }
+        ],
+        "partitions": [
+          {
+            "name": "customer",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "let\n    Source = Snowflake.Databases(\"example.snowflakecomputing.com\", \"REPORTING_WH\"),\n    DB = Source{[Name=\"SNOWFLAKE_SAMPLE_DATA\",Kind=\"Database\"]}[Data],\n    SCH = DB{[Name=\"TPCH_SF1\",Kind=\"Schema\"]}[Data],\n    T = SCH{[Name=\"CUSTOMER\",Kind=\"Table\"]}[Data]\nin\n    T"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Targets",
+        "columns": [
+          { "name": "Segment", "dataType": "string", "sourceColumn": "Segment" },
+          { "name": "Target", "dataType": "double", "sourceColumn": "Target" }
+        ],
+        "partitions": [
+          {
+            "name": "Targets",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "let\n    Source = Excel.Workbook(Web.Contents(\"https://example.sharepoint.com/sites/finance/Shared%20Documents/targets.xlsx\"), null, true),\n    Targets_Sheet = Source{[Item=\"Targets\",Kind=\"Sheet\"]}[Data]\nin\n    Targets_Sheet"
+            }
+          }
+        ]
+      },
+      {
+        "name": "Regions",
+        "columns": [
+          { "name": "RegionName", "dataType": "string", "sourceColumn": "RegionName" }
+        ],
+        "partitions": [
+          {
+            "name": "Regions",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": "let\n    Source = Sql.Database(\"example-sql.database.windows.net\", \"Reference\"),\n    dbo_Regions = Source{[Schema=\"dbo\",Item=\"Regions\"]}[Data]\nin\n    dbo_Regions"
+            }
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "a1b2c3d4-0000-4000-8000-000000000001",
+        "fromTable": "orders",
+        "fromColumn": "o_custkey",
+        "toTable": "customer",
+        "toColumn": "C_CUSTKEY"
+      },
+      {
+        "name": "a1b2c3d4-0000-4000-8000-000000000002",
+        "fromTable": "customer",
+        "fromColumn": "C_MKTSEGMENT",
+        "toTable": "Targets",
+        "toColumn": "Segment",
+        "fromCardinality": "many",
+        "toCardinality": "many",
+        "crossFilteringBehavior": "bothDirections"
+      }
+    ],
+    "roles": [
+      {
+        "name": "Building segment",
+        "modelPermission": "read",
+        "members": [],
+        "tablePermissions": [
+          { "name": "customer", "filterExpression": "customer[C_MKTSEGMENT] = \"BUILDING\"" }
+        ]
+      }
+    ]
+  }
+}

@@ -49,3 +49,12 @@ def current_user(request: Request) -> User:
 
 def can_open(user: User, groups: list[str]) -> bool:
     return not groups or bool(user.groups & set(groups))
+
+
+def can_open_dashboard(user: User, board, drafts_groups: list[str] = (), local: bool = False) -> bool:
+    """Whether this person may open a dashboard. A live one follows its `groups` ([] = everyone). A draft
+    (`status: draft`) is only for `drafts_groups` (src/environments.yml) plus its own `groups`; an empty list there
+    means nobody, never everyone. A local run shows drafts to the person running it, as the same `groups` check."""
+    if not getattr(board, "draft", False) or local:
+        return can_open(user, board.groups)
+    return bool(user.groups & (set(drafts_groups) | set(board.groups)))
