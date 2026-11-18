@@ -42,7 +42,9 @@ to their own workspaces. Contributions to this repo go straight to `main`.
 ## AI-assisted contributions
 
 Welcome. Dashboards here are designed to be written by AI coding tools. [AGENTS.md](AGENTS.md) has the rules they
-should follow. You are still responsible for what you submit: read it and run the checks.
+should follow. [docs/DASHBOARD_WORKFLOW.md](docs/DASHBOARD_WORKFLOW.md) is the shared workflow for all
+agents; keep tool-specific entry points as links to it. You are still responsible for what you submit: read it
+and run the checks.
 
 ## Licence of contributions
 

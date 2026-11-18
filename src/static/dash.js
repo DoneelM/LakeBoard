@@ -2,6 +2,8 @@
  * Datasets load lazily on first dash.data(id). Rows arrive as strings (like a CSV), so pages convert numbers.
  * Pages written as Claude Dashboard artifacts (`page: artifact`, decision 0011) get the artifact's behaviour where
  * it differs from LakeBoard's own pages: `ARTIFACT` below. static/artifact.js mounts and runs such a page. */
+/* LakeBoard data runtime: the documented `dash` API, backed by /api/d/<slug>/data/<id>.
+ * Datasets load lazily on first dash.data(id). Rows arrive as strings (like a CSV), so pages convert numbers. */
 (() => {
   const cfg = window.PORTAL;
   const ARTIFACT = cfg.page === 'artifact';

@@ -4,6 +4,10 @@ This is the contract every dashboard follows, whoever or whatever writes it (a p
 Cursor or another tool). If the checks in step 5 pass, the portal can host it. The worked example throughout is
 [`src/dashboards/city-trips/`](../src/dashboards/city-trips/), which reads the built-in `samples.nyctaxi.trips` table.
 
+For the shared agent workflow, start with [DASHBOARD_WORKFLOW.md](DASHBOARD_WORKFLOW.md). Business authors
+using a coding agent and Genie MCP can start with [BUSINESS_AUTHORS.md](BUSINESS_AUTHORS.md). This document
+defines the hosting contract; it does not depend on the agent's own preview environment.
+
 A dashboard is one folder. Nothing outside the folder changes.
 
 ```
@@ -215,3 +219,22 @@ its parameters (types taken from the defaults and the artifact's rules) and any 
 
 Artifact rules LakeBoard doesn't enforce (lists of allowed values, patterns) are noted in the SQL and `IMPORT.md`:
 parameters are bound with their type, so a value can't change the query, but any value of that type is accepted.
+## Prototyping in another tool
+
+The preferred route is to generate the dashboard directly in the repository against the `dash` and `kit` APIs
+above, then preview it in the local portal. Any coding agent with the required file and command tools can follow
+the same workflow. An agent-specific artifact or preview is optional.
+
+To adapt an existing prototype:
+
+- Replace uploaded-file or mock-data access with declared datasets in `dashboard.yml`, read-only `sql/*.sql`
+  files and `dash.data('<id>')`. Match the returned columns and handle strings and nulls.
+- Replace preview-only components and external libraries with `kit` or approved bundled libraries. The hosted
+  page is HTML, CSS and JavaScript; it has no React/JSX compilation or agent-provided APIs.
+- Use the portal's theme and shell. Remove copies of `dash.js`, `kit.js`, `kit.css`, vendor libraries and shell
+  styles that were included just to make an isolated preview work.
+- Check every `dash` and `kit` call against this reference, and verify the final page in the portal. A successful
+  preview in another product does not prove hosting compatibility.
+
+Claude Dashboard artifacts were the original prototype source and may expose compatible `dash` calls. They
+still need the same checks and adaptation; they are not required to create or host a LakeBoard dashboard.
