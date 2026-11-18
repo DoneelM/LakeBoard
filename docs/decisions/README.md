@@ -59,3 +59,4 @@ this repository.
 | [0011](0011-claude-dashboard-artifacts.md) | Claude Dashboard artifacts run as-is | Accepted |
 | [0012](0011-agent-independent-dashboard-authoring.md) | Agent-independent dashboard authoring | In progress |
 | [0013](0013-platform-reliability.md) | Shared access, warm policy and honest freshness | Accepted |
+| [0014](0014-travel-operations-showcase.md) | Travel Operations personal showcase | Accepted |

@@ -1,0 +1,44 @@
+title: Travel Operations
+description: "An operating view of a sample stays marketplace: bookings, destinations and guest experience, with saved destinations and a TV view."
+owner: Doneel Maran
+section: Travel
+order: 5
+groups: []
+libs: [leaflet]
+params:
+  year: {type: INT, default: 2025}
+  destination_id: {type: BIGINT}
+# Public, fixed sample data; every viewer may see the same rows and masks. Shared results are appropriate here.
+# No startup warming: the page loads on demand, avoiding unused warehouse work on a personal workspace.
+datasets:
+  portfolio:
+    title: Destination performance
+    description: Booking and review measures aggregated separately per destination, plus listing inventory and map coordinates.
+    sql: sql/portfolio.sql
+    cache: shared
+    cache_ttl: 24h
+    source: "Fixed public Wanderbricks sample. Bookings use check-in year; reviews use review-created year. 2025 is partial."
+  monthly:
+    title: Monthly booking value
+    description: Non-cancelled booked value, total bookings and cancellations by destination and check-in month.
+    sql: sql/monthly.sql
+    cache: shared
+    cache_ttl: 24h
+  stars:
+    title: Guest ratings
+    description: Counts per destination and whole-star bucket for reviews created in the reporting year, excluding deleted reviews.
+    sql: sql/stars.sql
+    cache: shared
+    cache_ttl: 24h
+  comments:
+    title: Guest comments
+    description: Review phrases and their counts and rating totals by destination and review-created year.
+    sql: sql/comments.sql
+    cache: shared
+    cache_ttl: 24h
+  properties:
+    title: Destination properties
+    description: Listing inventory and separately aggregated booking and review performance for a selected destination.
+    sql: sql/properties.sql
+    cache: shared
+    cache_ttl: 24h

@@ -1,0 +1,380 @@
+<style>
+.to-page { max-width: 1680px; margin: auto; padding: 24px; }
+.to-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+.to-eyebrow { margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .15em; color: var(--brand); }
+.to-hero h1 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -.04em; line-height: 1.1; margin: 0 0 8px; }
+.to-hero p:not(.to-eyebrow) { margin: 0; color: var(--color-fg-muted); font-size: 13px; }
+.to-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.to-filters { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; padding: 14px; border: 1px solid var(--color-border-line); background: var(--color-panel); }
+.to-filters > .kit-filters { flex: 1; border: 0; padding: 0; margin: 0; }
+.to-scope { min-height: 34px; display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.to-saved { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 0; min-height: 42px; font-size: 12px; }
+.to-muted, .to-note { color: var(--color-fg-muted); }
+.to-note { margin: 8px 0 0; font-size: 12px; line-height: 1.55; }
+.to-chip { display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--color-border-line); background: var(--color-panel); }
+.to-chip button { border: 0; background: transparent; color: var(--color-fg); cursor: pointer; padding: 4px 7px; font: inherit; }
+.to-chip button:hover { color: var(--brand); }
+.to-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--color-border-line); margin: 6px 0 16px; overflow-x: auto; }
+.to-tabs button { flex-shrink: 0; padding: 12px 14px; background: transparent; color: var(--color-fg-muted); font: inherit; font-size: 13px; font-weight: 700; border: 0; border-bottom: 3px solid transparent; cursor: pointer; }
+.to-tabs button[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); }
+.to-kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 16px; }
+.to-kpis .kit-tile { padding: 14px; }
+.to-kpis .kit-tile strong { font-size: clamp(21px, 2.15vw, 30px); }
+.to-row { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.to-row > * { min-width: 0; }
+.to-card { padding: 18px; }
+.to-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.to-card-head h2 { margin: 0; font-size: 14px; }
+.to-card-head span { color: var(--color-fg-muted); font-size: 11px; text-align: right; }
+#to-map { height: 315px; min-height: 280px; }
+.to-card .kit-bar { grid-template-columns: minmax(6rem, 1fr) minmax(3rem, 2fr) 5.5rem; }
+.to-banner { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; padding: 10px 12px; background: var(--color-panel); border-left: 3px solid var(--brand); font-size: 12px; margin-top: 16px; }
+.to-banner strong { font-weight: 700; }
+.to-empty { padding: 28px 14px; margin: 12px 0; border: 1px dashed var(--color-border-line); background: var(--color-panel); }
+.to-empty h2 { margin: 0 0 6px; font-size: 16px; }
+.to-empty p { margin: 0 0 12px; color: var(--color-fg-muted); font-size: 13px; }
+.to-save { border: 0; background: transparent; color: var(--brand); cursor: pointer; padding: 4px 8px; font-size: 18px; }
+.to-comments { display: grid; gap: 10px; }
+.to-comment { padding: 12px; border-left: 3px solid var(--chart-2); background: var(--color-bg); }
+.to-comment p { margin: 0 0 6px; font-size: 13px; }
+.to-comment small { color: var(--color-fg-muted); }
+.to-section { margin-top: 16px; }
+.to-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; border-top: 1px solid var(--color-border-line); padding-top: 16px; margin-top: 20px; font-size: 11px; color: var(--color-fg-muted); }
+.to-footer a { color: var(--brand); }
+.to-page [hidden] { display: none !important; }
+/* TV view is a reversible presentation layout. No automatic query refresh or full-screen permission is needed. */
+.to-tv .pn, .to-tv .pn-top, .to-tv .pn-scrim { display: none; }
+.to-tv .pn-main { margin-left: 0; }
+.to-tv .to-page { max-width: none; padding: 24px 32px; }
+.to-tv .to-filters, .to-tv .to-saved, .to-tv .to-tabs, .to-tv .to-footer { display: none; }
+.to-tv .to-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.to-tv .to-kpis .kit-tile strong { font-size: clamp(28px, 3vw, 46px); }
+.to-tv .to-hero h1 { font-size: 42px; }
+.to-tv #to-map { height: 340px; }
+@media (max-width: 1150px) { .to-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+ .to-page { padding: 16px 12px; }
+ .to-hero { flex-direction: column; gap: 12px; }
+ .to-row, .to-tv .to-row { grid-template-columns: minmax(0, 1fr); }
+ .to-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+ .to-kpis .kit-tile { padding: 12px; }
+ .to-card { padding: 12px; }
+ .to-filters > .kit-filters { flex-basis: 100%; }
+ .to-tabs button { padding: 12px 10px; }
+ .to-card-head { flex-wrap: wrap; gap: 4px; }
+ .to-tv .to-page { padding: 16px 12px; }
+ .to-tv .to-hero h1 { font-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { .to-page * { scroll-behavior: auto; } }
+</style>
+
+<div class="to-page" id="to-root">
+  <header class="to-hero">
+    <div>
+      <p class="to-eyebrow">LAKEBOARD / A DONEEL MARAN SHOWCASE</p>
+      <h1>Travel Operations</h1>
+      <p>A global stays marketplace. One place to see performance, focus your portfolio and listen to guests.</p>
+    </div>
+    <div class="to-actions">
+      <button type="button" class="kit-btn" id="to-reset">Reset view</button>
+      <button type="button" class="kit-btn" id="to-tv" aria-pressed="false">TV view</button>
+    </div>
+  </header>
+
+  <div class="to-filters">
+    <div id="to-filters"></div>
+    <label class="to-scope"><input id="to-my" type="checkbox"> My destinations only</label>
+  </div>
+  <div class="to-saved" id="to-saved" aria-label="Saved destinations"></div>
+  <div class="to-tabs" role="tablist" aria-label="Travel Operations views">
+    <button type="button" role="tab" id="to-tab-overview" aria-controls="to-panel-overview" aria-selected="true" tabindex="0">Overview</button>
+    <button type="button" role="tab" id="to-tab-destinations" aria-controls="to-panel-destinations" aria-selected="false" tabindex="-1">Destinations</button>
+    <button type="button" role="tab" id="to-tab-guests" aria-controls="to-panel-guests" aria-selected="false" tabindex="-1">Guest experience</button>
+  </div>
+  <div id="to-health" role="status" aria-live="polite"></div>
+  <div id="to-empty" class="to-empty" hidden>
+    <h2>No destinations in this view</h2>
+    <p id="to-empty-note">Save destinations in the Destinations tab, or reset your filters.</p>
+    <button type="button" class="kit-btn" id="to-clear-scope">Show all destinations</button>
+  </div>
+  <div id="to-kpis" class="to-kpis" data-source="portfolio"></div>
+
+  <section role="tabpanel" id="to-panel-overview" aria-labelledby="to-tab-overview" tabindex="0">
+    <div class="to-row">
+      <section class="kit-card to-card" aria-labelledby="to-map-title">
+        <div class="to-card-head"><h2 id="to-map-title">A world of destinations</h2><span>Pick a destination to focus the whole view</span></div>
+        <div id="to-map-state" data-source="portfolio"></div><div id="to-map"></div>
+        <p class="to-note">Each marker is a destination. The ranked list and Destinations table offer the same selection from the keyboard.</p>
+      </section>
+      <section class="kit-card to-card">
+        <div class="to-card-head"><h2>Where booking value comes from</h2><span>Top 8 in this view</span></div>
+        <div id="to-top" data-source="portfolio"></div>
+        <div id="to-top-actions" class="to-saved"></div>
+      </section>
+    </div>
+    <div class="to-row">
+      <section class="kit-card to-card">
+        <div class="to-card-head"><h2>Booking value over time</h2><span>By check-in month</span></div>
+        <div id="to-trend" data-source="monthly"></div>
+        <p class="to-note">The generated sample grows sharply in mid-2025. This is sample behaviour, not a forecast or evidence of business growth.</p>
+      </section>
+      <section class="kit-card to-card">
+        <div class="to-card-head"><h2>Cancellation watch</h2><span>Largest cancelled-booking counts</span></div>
+        <div id="to-watch" data-source="portfolio"></div>
+        <p class="to-note">A descriptive review list, not a live alert. Rate = cancelled ÷ all bookings.</p>
+      </section>
+    </div>
+  </section>
+
+  <section role="tabpanel" id="to-panel-destinations" aria-labelledby="to-tab-destinations" tabindex="0" hidden>
+    <section class="kit-card to-card">
+      <div class="to-card-head"><h2>Your destination portfolio</h2><span>☆ saves a destination on this browser</span></div>
+      <div id="to-table" data-source="portfolio"></div>
+    </section>
+    <section class="kit-card to-card to-section">
+      <div class="to-card-head"><h2 id="to-properties-title">Inside a destination</h2><span>Pick a row above to inspect its listings</span></div>
+      <div id="to-properties" data-source="properties"></div>
+    </section>
+  </section>
+
+  <section role="tabpanel" id="to-panel-guests" aria-labelledby="to-tab-guests" tabindex="0" hidden>
+    <div class="to-row">
+      <section class="kit-card to-card">
+        <div class="to-card-head"><h2>How stays are rated</h2><span>Review-created year</span></div>
+        <div id="to-stars" data-source="stars"></div>
+        <p class="to-note">Whole-star buckets round down: 3.7 is in the 3-star bucket. The headline rating uses the unrounded scores.</p>
+      </section>
+      <section class="kit-card to-card">
+        <div class="to-card-head"><h2>What guests say</h2><span>Most repeated phrases</span></div>
+        <div id="to-comments" data-source="comments"></div>
+        <p class="to-note">Synthetic reviews repeat a small phrase set. These are counted comments, not AI-generated sentiment.</p>
+      </section>
+    </div>
+    <section class="kit-card to-card to-section">
+      <div class="to-card-head"><h2>Where guest experience needs a look</h2><span>At least 20 reviews; ranked by low-rating share</span></div>
+      <div id="to-guest-table" data-source="portfolio"></div>
+    </section>
+  </section>
+
+  <div class="to-banner" id="to-coverage" aria-live="polite"><strong>Public sample snapshot</strong><span>Checking data coverage…</span></div>
+  <details class="to-note to-section">
+    <summary>Read the measures</summary>
+    <p>Booked value sums non-cancelled bookings, including pending and confirmed stays; it is not settled payments or recognized revenue.
+    Amounts use the sample's dollar convention; no currency conversion is performed. Booking measures use check-in year; guest measures use review-created year.
+    Property counts describe the fixed listing inventory. Unknown ratings stay blank. Sample data never changes.</p>
+  </details>
+  <footer class="to-footer">
+    <span>Built by Doneel Maran · LakeBoard · Public Wanderbricks sample</span>
+    <a href="https://github.com/DoneelM/LakeBoard" target="_blank" rel="noopener noreferrer">Explore the project on GitHub ↗</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const {h, fmt, num} = kit;
+  const STORE = 'lakeboard:travel-operations:saved:v1';
+  let saved = new Set(), storageUnavailable = false;
+  try {
+    const value = JSON.parse(localStorage.getItem(STORE) || '[]');
+    if (Array.isArray(value)) saved = new Set(value.filter(v => /^\d+$/.test(String(v))).map(String).slice(0, 100));
+  } catch (_) { storageUnavailable = true; }
+  const state = { country: '', destination: '', mine: false, tab: 'overview', tv: false };
+  const media = matchMedia('(prefers-color-scheme: dark)');
+  media.addEventListener('change',()=>map?.map.getContainer().classList.toggle('kit-map-dark',media.matches));
+  let map = null, lastOptions = null, mapRows = null, resizeTimer = null;
+  const sum = (rows, key) => rows.reduce((n, r) => n + (num(r[key]) || 0), 0);
+  const ratio = (a, b) => b ? a / b : null;
+  const latest = (rows, key) => rows.map(r => r[key]).filter(Boolean).sort().at(-1) || null;
+  const compactMoney = v => '$' + fmt.compact(v);
+  const save = () => {
+    try { localStorage.setItem(STORE, JSON.stringify([...saved])); }
+    catch (_) { storageUnavailable = true; }
+  };
+  const controls = kit.filters('#to-filters', [
+    {id:'year',label:'Reporting year',type:'select',all:false,options:[{value:'2025',label:'2025 · partial sample'},'2024','2023'],value:String(dash.params().year)},
+    {id:'country',label:'Country',type:'select',options:[],all:'All countries'},
+    {id:'destination',label:'Destination',type:'select',options:[],all:'All destinations'},
+  ], (v, id) => {
+    if (id === 'year') dash.setParams({year:v.year});
+    if (id === 'country') { state.country=v.country; state.destination=''; controls.set('destination',''); dash.setParams({destination_id:null}); lastOptions=null; }
+    if (id === 'destination') choose(v.destination);
+    draw();
+  });
+  function choose(id) {
+    state.destination = String(id || '');
+    controls.set('destination',state.destination);
+    dash.setParams({destination_id:state.destination || null});
+    mapRows=null; draw();
+  }
+  function toggleSaved(id) {
+    id=String(id); if(saved.has(id)) saved.delete(id); else saved.add(id);
+    save(); draw();
+  }
+  function reset() {
+    state.country=''; state.destination=''; state.mine=false;
+    document.getElementById('to-my').checked=false;
+    controls.set('country',''); controls.set('destination',''); lastOptions=null;
+    dash.setParams({destination_id:null}); draw();
+  }
+  document.getElementById('to-reset').addEventListener('click',reset);
+  document.getElementById('to-clear-scope').addEventListener('click',reset);
+  document.getElementById('to-my').addEventListener('change', e => {state.mine=e.target.checked; draw();});
+  const tabs = [...document.querySelectorAll('.to-tabs [role="tab"]')];
+  function selectTab(name, focus=false) {
+    state.tab=name;
+    for (const button of tabs) {
+      const active=button.id === 'to-tab-'+name;
+      button.setAttribute('aria-selected',String(active)); button.tabIndex=active?0:-1;
+      document.getElementById(button.getAttribute('aria-controls')).hidden=!active;
+      if(active && focus) button.focus();
+    }
+    dash.setLink(name === 'overview' ? '' : name);
+    draw();
+  }
+  for (const [index, button] of tabs.entries()) {
+    button.addEventListener('click',()=>selectTab(button.id.replace('to-tab-','')));
+    button.addEventListener('keydown',e=> {
+      const next=e.key==='ArrowRight'?(index+1)%tabs.length:e.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:e.key==='Home'?0:e.key==='End'?tabs.length-1:null;
+      if(next!==null){e.preventDefault(); selectTab(tabs[next].id.replace('to-tab-',''),true);}
+    });
+  }
+  function tv(enabled) {
+    state.tv=enabled;
+    document.documentElement.classList.toggle('to-tv',enabled);
+    const button=document.getElementById('to-tv'); button.setAttribute('aria-pressed',String(enabled)); button.textContent=enabled?'Exit TV view · Esc':'TV view';
+    if(enabled) selectTab('overview');
+    draw(); requestAnimationFrame(()=>{map?.map.invalidateSize(); dispatchEvent(new Event('resize'));});
+  }
+  document.getElementById('to-tv').addEventListener('click',()=>tv(!state.tv));
+  addEventListener('keydown',e=>{if(e.key==='Escape' && state.tv){tv(false);document.getElementById('to-tv').focus();}});
+  addEventListener('resize',()=> {clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>draw(),150);});
+  function scoped(rows, ids) {return rows.filter(r=>ids.has(String(r.destination_id)));}
+  function ready(el, d) {
+    if (!kit.ready(el,d.refreshing ? {...d,status:'loading'} : d)) return false;
+    if(d.cut || d.truncated) document.getElementById('to-health').textContent='Some rows were truncated. Totals and rankings may be incomplete.';
+    return true;
+  }
+  function saveButton(r) {
+    const yes=saved.has(String(r.destination_id));
+    return h('button',{type:'button',class:'to-save','aria-pressed':String(yes),'aria-label':`${yes?'Unsave':'Save'} ${r.destination}`,onkeydown:e=>e.stopPropagation(),onclick:e=>{e.stopPropagation();toggleSaved(r.destination_id);}},yes?'★':'☆');
+  }
+  const columns = [
+    {key:'destination',label:'Destination'}, {key:'country',label:'Country'},
+    {key:'booked_value',label:'Booked value',fmt:fmt.money,align:'right'},
+    {key:'bookings',label:'Bookings',fmt:fmt.num,align:'right'},
+    {key:'cancel_rate',label:'Cancelled',fmt:fmt.pct,align:'right'},
+    {key:'rating',label:'Rating / 5',fmt:v=>fmt.num(v,2),align:'right'},
+    {key:'properties',label:'Listings',fmt:fmt.num,align:'right'},
+  ];
+  function draw() {
+    const p=dash.data('portfolio');
+    const health=document.getElementById('to-health'); health.textContent='';
+    const portfolioReady=ready('#to-kpis',p);
+    if(!portfolioReady){
+      document.getElementById('to-empty').hidden=true;
+      for(const id of ['to-top','to-watch','to-table','to-guest-table','to-map-state','to-trend','to-stars','to-comments','to-properties'])ready('#'+id,p);
+      document.getElementById('to-coverage').replaceChildren(h('strong',null,'Public sample snapshot'),h('span',null,'Waiting for the selected reporting year…'));
+      document.getElementById('to-top-actions').replaceChildren();
+      if(map)map.set([]);
+      return;
+    }
+    const all=p.data.map(r=>({...r, cancel_rate:ratio(num(r.cancelled),num(r.bookings)),rating:ratio(num(r.rating_sum),num(r.reviews)),low_share:ratio(num(r.low_reviews),num(r.reviews))}));
+    // Populate options only when the result changes or country changes; filter values survive redraws.
+    const optionKey=p.data;
+    if(lastOptions!==optionKey) {
+      controls.options('country',[...new Set(all.map(r=>r.country))].sort()); controls.set('country',state.country);
+      controls.options('destination',all.filter(r=>!state.country||r.country===state.country).sort((a,b)=>a.destination.localeCompare(b.destination)).map(r=>({value:String(r.destination_id),label:r.destination})));
+      controls.set('destination',state.destination);lastOptions=optionKey;
+      const valid = new Set(all.map(r=>String(r.destination_id)));
+      saved=new Set([...saved].filter(id=>valid.has(id)));
+    }
+    const rows=all.filter(r=>(!state.country||r.country===state.country)&&(!state.destination||String(r.destination_id)===state.destination)&&(!state.mine||saved.has(String(r.destination_id))));
+    const ids=new Set(rows.map(r=>String(r.destination_id)));
+    document.getElementById('to-empty').hidden=rows.length>0;
+    document.getElementById('to-empty-note').textContent=state.mine&&!saved.size?'You have no saved destinations yet. Show all destinations and use ☆ in the Destinations tab.':'No destinations match these filters. Show all destinations to reset the view.';
+    document.getElementById('to-kpis').hidden=!rows.length;
+    for(const section of document.querySelectorAll('[role="tabpanel"]'))section.hidden=section.id!=='to-panel-'+state.tab||!rows.length;
+    const total=sum(rows,'bookings'), cancelled=sum(rows,'cancelled'), value=sum(rows,'booked_value'), reviews=sum(rows,'reviews');
+    kit.tiles('#to-kpis',[
+      {label:'Booked value',value:compactMoney(value),note:'Non-cancelled · sample dollars'},
+      {label:'Bookings',value:fmt.compact(total),note:fmt.num(sum(rows,'pending'))+' pending'},
+      {label:'Cancellation rate',value:fmt.pct(ratio(cancelled,total)),note:fmt.num(cancelled)+' cancelled'},
+      {label:'Guest rating',value:fmt.num(ratio(sum(rows,'rating_sum'),reviews),2),note:fmt.num(reviews)+' reviews · out of 5'},
+      {label:'Properties',value:fmt.compact(sum(rows,'properties')),note:'Fixed listing inventory'},
+      {label:'Destinations',value:fmt.num(rows.length),note:state.mine?'Your saved portfolio':'In the current view'},
+    ]);
+    const savedBox=document.getElementById('to-saved');
+    savedBox.replaceChildren(h('span',{class:'to-muted'},'Saved on this browser:'),...all.filter(r=>saved.has(String(r.destination_id))).map(r=>h('span',{class:'to-chip'},
+      h('button',{type:'button',onclick:()=>{state.country='';controls.set('country','');lastOptions=null;choose(r.destination_id);}},r.destination),
+      h('button',{type:'button','aria-label':'Remove '+r.destination+' from saved',onclick:()=>toggleSaved(r.destination_id)},'×'))));
+    if(!saved.size)savedBox.append(h('span',{class:'to-muted'},'Use ☆ in Destinations to build your portfolio.'));
+    if(storageUnavailable)savedBox.append(h('span',{class:'to-muted'},'Storage unavailable; selections last for this page only.'));
+    if(state.destination) {
+      const selected=all.find(r=>String(r.destination_id)===state.destination);
+      if(selected)savedBox.append(h('button',{type:'button',class:'kit-btn',onclick:()=>toggleSaved(state.destination)},(saved.has(state.destination)?'★ Saved: ':'☆ Save ')+selected.destination));
+    }
+    const through=latest(rows,'last_check_in');
+    document.getElementById('to-coverage').replaceChildren(h('strong',null,`Public sample snapshot · ${dash.params().year}`),
+      h('span',null,through?'Bookings through '+fmt.date(through):'No bookings in this reporting year'),
+      h('span',{class:'to-muted'},state.destination?(rows[0]?.destination||'No destination'):[state.country,state.mine?'Saved destinations':''].filter(Boolean).join(' · ')||'All destinations'));
+    if(!rows.length)return;
+    if(state.tab==='overview') {
+      document.getElementById('to-map-state').replaceChildren();
+      if(!map){map=kit.map('#to-map',{dark:matchMedia('(prefers-color-scheme: dark)').matches,
+        tooltip:r=>`${r.destination}, ${r.country}\n${fmt.money(r.booked_value)} booked · ${fmt.num(r.bookings)} bookings\n${fmt.pct(r.cancel_rate)} cancelled`,onClick:r=>choose(r.destination_id)});map?.map.scrollWheelZoom.disable();}
+      const mapKey=JSON.stringify([p.data, state.country,state.destination,state.mine,[...saved]]);
+      if(map && mapRows!==mapKey){mapRows=mapKey;map.set(rows.filter(r=>num(r.lat)!==null&&num(r.lon)!==null).map(r=>({...r,lat:+r.lat,lon:+r.lon,color:dash.colors[0]})));}
+      kit.bars('#to-top',{rows,label:'destination',value:'booked_value',fmt:compactMoney,max:8});
+      document.getElementById('to-top-actions').replaceChildren(...rows.slice().sort((a,b)=>+b.booked_value-+a.booked_value).slice(0,3).map(r=>h('button',{class:'kit-btn',type:'button',onclick:()=>choose(r.destination_id)},'Explore '+r.destination)));
+      kit.table('#to-watch',{rows:rows.filter(r=>+r.bookings>0).sort((a,b)=>+b.cancelled-+a.cancelled).slice(0,5),columns:[columns[0],{key:'cancelled',label:'Cancelled',fmt:fmt.num,align:'right'},{...columns[4],label:'Rate'}],onRow:r=>choose(r.destination_id)});
+      const monthly=dash.data('monthly');
+      if(ready('#to-trend',monthly)){
+        const values=new Map();
+        for(const r of scoped(monthly.data,ids))values.set(r.month,(values.get(r.month)||0)+(+r.booked_value||0));
+        const trend=[...values].sort(([a],[b])=>a.localeCompare(b)).map(([month,booked_value])=>({month,booked_value}));
+        if(trend.length)kit.line('#to-trend',{rows:trend,x:'month',series:[{key:'booked_value',label:'Booked value'}],fmt:compactMoney,height:210,label:'Non-cancelled booking value by check-in month'});
+        else document.getElementById('to-trend').textContent='No bookings in this period.';
+      }
+    }
+    if(state.tab==='destinations') {
+      kit.table('#to-table',{rows,columns:[{key:'saved',label:'Save',render:saveButton},...columns],csv:'travel-operations-destinations',onRow:r=>choose(r.destination_id)});
+      const selected=all.find(r=>String(r.destination_id)===state.destination);
+      document.getElementById('to-properties-title').textContent=selected?'Inside '+selected.destination:'Inside a destination';
+      if(!selected)document.getElementById('to-properties').textContent='Pick a destination above to load its property performance.';
+      else {
+        const properties=dash.data('properties');
+        if(ready('#to-properties',properties))kit.table('#to-properties',{rows:properties.data,empty:'No properties in this destination.',csv:'travel-operations-properties',max:100,columns:[
+          {key:'title',label:'Property'},{key:'property_type',label:'Type'},
+          {key:'booked_value',label:'Booked value',fmt:fmt.money,align:'right'},
+          {key:'bookings',label:'Bookings',fmt:fmt.num,align:'right'},
+          {key:'rating',label:'Rating / 5',fmt:v=>fmt.num(v,2),align:'right'},
+        ]});
+      }
+    }
+    if(state.tab==='guests') {
+      const stars=dash.data('stars'),comments=dash.data('comments');
+      if(ready('#to-stars',stars)){
+        const buckets=[5,4,3,2,1].map(star=>({label:star+' stars',reviews:sum(scoped(stars.data,ids).filter(r=>+r.stars===star),'reviews')}));
+        if(!sum(buckets,'reviews'))document.getElementById('to-stars').textContent='No reviews in this period.';
+        else {
+          kit.bars('#to-stars',{rows:buckets,label:'label',value:'reviews',fmt:fmt.num,color:r=>+r.label[0]>=4?'var(--chart-5)':'var(--chart-1)'});
+          const bars=document.querySelector('#to-stars .kit-bars');
+          bars.replaceChildren(...[...bars.children].sort((a,b)=>Number(b.querySelector('.kit-bar-label').textContent[0])-Number(a.querySelector('.kit-bar-label').textContent[0])));
+        }
+      }
+      if(ready('#to-comments',comments)){
+        const phrases=new Map();
+        for(const r of scoped(comments.data,ids)){const prev=phrases.get(r.comment)||{reviews:0,rating_sum:0};prev.reviews+=+r.reviews;prev.rating_sum+=+r.rating_sum;phrases.set(r.comment,prev);}
+        const top=[...phrases].sort(([,a],[,b])=>b.reviews-a.reviews).slice(0,4);
+        document.getElementById('to-comments').replaceChildren(h('div',{class:'to-comments'},top.length?top.map(([comment,r])=>h('article',{class:'to-comment'},h('p',null,comment),h('small',null,fmt.num(r.reviews)+' reviews · '+fmt.num(r.rating_sum/r.reviews,2)+' / 5'))):h('p',{class:'to-muted'},'No review comments in this period.')));
+      }
+      kit.table('#to-guest-table',{rows:rows.filter(r=>+r.reviews>=20).sort((a,b)=>b.low_share-a.low_share),csv:'travel-operations-guest-experience',columns:[columns[0],columns[5],{key:'reviews',label:'Reviews',fmt:fmt.num,align:'right'},{key:'low_share',label:'Below 2.5 stars',fmt:fmt.pct,align:'right'}],onRow:r=>choose(r.destination_id),empty:'No destinations with at least 20 reviews in this view.'});
+    }
+  }
+  dash.genieContext(()=>({View:state.tab,Year:String(dash.params().year),Country:state.country||'All',Portfolio:state.mine?'Saved destinations':'All selected destinations'}));
+  const initialTab=location.hash.slice(1);
+  if(['destinations','guests'].includes(initialTab))state.tab=initialTab;
+  dash.onData(draw);
+  selectTab(state.tab);
+})();
+</script>
