@@ -116,14 +116,19 @@ A result is stored under: **dashboard + dataset + who + the filter values that d
 | Default | One per viewer, per filter combination. Runs as the viewer | When someone asks and the result is older than `cache_ttl`, or they press Refresh | Anything with row-level security, or data only some people may see |
 | `cache: shared` | One for everybody, per filter combination. Runs as the first viewer to ask | Same as default | Data every viewer may see (no row-level security) |
 | `cache: shared` plus `warm:` | As above | The same, and also in the background at the `warm.times` on weekdays (in `warm.timezone`) and once when the app starts. Only in the `warm.environments` (prod by default). Runs as the portal's service principal | Shared data that is slow and has a few common views, so people find it ready |
+| `cache: shared` plus `warm:` and `warm_at: startup` | As above | Only once, in the background, when the app starts (in the `warm.environments`); never at the `warm.times`. After that, when someone asks and the result is older than `cache_ttl`, or they press Refresh. Runs as the portal's service principal | Slow shared data where scheduled runs would cost too much warehouse time, or data that doesn't change during the day. Pair it with a long `cache_ttl` (for example 24h) so the first viewer after start-up doesn't re-run it |
 | `auth: app` | One for everybody. Runs as the portal's service principal, so viewers need no Unity Catalog access. It cannot take filters | Default (`background: true`): in the background every `cache_ttl` minus 5 minutes, never more often than every 5 minutes (after a failure it retries in 15 minutes). With `background: false`: only when someone asks and the result has expired | People who have no access to the tables themselves |
 
 Notes:
 
 - Warming times, the time zone (any IANA zone; default UTC) and the environments are under `warm:` in `src/environments.yml`.
 - Warming needs the service principal to have read access to the views. `python scripts/grant_app_access.py --env prod --profile <your-profile> --warehouse <warehouse-id>` prints the grants, and `--apply` runs them. Run it for each environment that has `auth: app` or warmed datasets. Until that is done, warming fails quietly (it is logged) and the first viewer's query fills the cache instead.
+- `warm_at` (optional, only with `warm:`): `schedule` (the default) warms at start-up and at each `warm.times`;
+  `startup` warms only once, at start-up. See [Shared-result access and startup policy](#shared-result-access-and-startup-policy).
 - Each `warm:` entry is one filter combination. Any other combination runs on first use.
 - Use `cache: shared` only where every viewer may see the same rows. The result one person's query produced is shown to the next.
+  Before a shared result is returned, LakeBoard still checks that this viewer may run the query
+  ([below](#shared-result-access-and-startup-policy)); that protects the sources, not differences in rows.
 - A scheduled warm re-runs the query even if the cached result is still fresh. It replaces the result and restarts the clock.
 
 ### Refresh data and Refresh all
@@ -150,9 +155,9 @@ filters once per process with `warm_at: startup`, so scheduled warms do not re-q
 1. **Early morning.** The app is stopped (if you stop it overnight) and its cache is empty. The first person to open the portal starts it.
 2. **App starts.** Warming runs once at start-up and fills every `warm:` entry. Anyone who opens one of those dashboards before it finishes runs the query themselves.
 3. **First viewers.** Default datasets run as each person on first open. Later opens within the `cache_ttl` are instant. `auth: app` datasets run as the service principal and are reused for everyone.
-4. **First warm time** (07:00 by default). The warm run re-runs every `warm:` entry and replaces the results. (If the app only just started, this repeats the start-up warm.)
-5. **Midday.** Someone presses **Refresh data** on a shared dashboard. Every loaded dataset re-runs. The new result is what everyone sees from then on.
-6. **Second warm time** (13:00 by default). The warm run happens again.
+4. **First warm time** (07:00 by default). The warm run re-runs every `warm:` entry and replaces the results, except datasets with `warm_at: startup`, which keep their start-up result until it expires. (If the app only just started, this repeats the start-up warm.)
+5. **Midday.** Someone presses **Refresh data** on a shared dashboard. Loaded datasets whose sources changed, or can't be verified, re-run; the rest keep their result. (**Refresh all** re-runs every loaded dataset.) A new shared result is what everyone sees from then on.
+6. **Second warm time** (13:00 by default). The warm run happens again, as at the first warm time.
 7. **Evening.** If a job stops the app, the cache is gone. The next day starts again at step 1.
 
 ### Freshness is capped by the source
