@@ -330,7 +330,8 @@ Set `warm_at: startup` beside a dataset's `warm:` list to preload only once per 
 to be enabled for that environment (`warm.environments`), and local scripts still disable background warming.
 The default `warm_at: schedule` retains startup plus weekday scheduled runs. Expiry and Refresh still run queries.
 
-The freshness panel puts changed managed tables first, newest first, with counts and a text tag; live and untracked
-sources are separate. It opens changed details automatically and remembers manual open/closed choices.
+The freshness panel puts changed managed tables first, newest first, with counts, a text tag and how long after
+your data each was written; unchanged tables follow, newest first; live and untracked sources come last, ordered
+by kind (live, external, static, unknown, none). It opens changed details automatically and remembers manual open/closed choices.
 Optional `data_through` names a DATE result column and shows the latest returned event day. The fetch time,
 source-write time and event coverage are different facts. Missing coverage is never replaced with today's date.
