@@ -19,6 +19,22 @@ steps:
 - script: pip install -r src/requirements.txt
   displayName: Install
 
+# A pinned Databricks CLI release, checked against its SHA-256 before it is installed and before any credential is
+# requested. To upgrade, change both version and sha256 (from the release's checksums file). Decision 0018.
+- bash: |
+    set -euo pipefail
+    version=1.14.1
+    archive="databricks_cli_${version}_linux_amd64.zip"
+    sha256=06ecb5a3299a3ef85d0ec7095fa193dd28bc12834f59e9ba399846b3af2fbfe8
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    curl --fail --silent --show-error --location "https://github.com/databricks/cli/releases/download/v${version}/${archive}" -o "$tmp/$archive"
+    printf '%s  %s\n' "$sha256" "$tmp/$archive" | sha256sum --check --strict
+    unzip -q "$tmp/$archive" databricks -d "$tmp"
+    sudo install -m 0755 "$tmp/databricks" /usr/local/bin/databricks
+    databricks --version
+  displayName: Install the checksum-verified Databricks CLI
+
 - task: AzureCLI@2
   displayName: "Get Databricks Token"
   inputs:
@@ -31,11 +47,6 @@ steps:
         --query accessToken -o tsv)
 
       echo "##vso[task.setvariable variable=DATABRICKS_TOKEN;issecret=true]$TOKEN"
-
-- script: |
-    curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | bash
-    databricks --version
-  displayName: Install Databricks CLI
 
 - script: databricks bundle validate -t ${{ parameters.target }}
   displayName: Validate Bundle

@@ -432,17 +432,20 @@ def test_build_script_reads_only_dashboards_live_in_that_environment(tmp_path, m
 # --- the HTTP endpoints ---
 
 DAILY_ORDERS = """title: Daily Orders
+groups: [viewers]
 datasets:
   orders:
     title: Daily orders
     sql: sql/orders.sql
     auth: app
+    groups: [viewers]
     cache_ttl: 10m
     source: Refreshed by the orders job at 06:00, 10:00 and 14:00.
   exceptions:
     title: Order exceptions
     sql: sql/exceptions.sql
     auth: app
+    groups: [viewers]
     cache_ttl: 10m
     source: Refreshed by the orders job at 06:00, 10:00 and 14:00.
 """

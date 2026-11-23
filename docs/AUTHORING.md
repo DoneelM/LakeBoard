@@ -54,7 +54,7 @@ datasets:
     warm_at: startup              # optional with warm:; once per process. Default schedule also runs at warm.times
     data_through: latest_day       # optional DATE result column; latest returned date in the freshness panel
     refresh: always                # optional; rerun on Refresh data if SQL depends on anything beyond table writes
-    auth: app                     # optional; read as the portal's service principal, for people with no access to the data themselves. One shared result, no filters; refreshed in the background every cache_ttl minus 5 minutes
+    auth: app                     # optional; needs groups: on the dashboard and on this dataset. Read as the portal's service principal, for people with no access to the data themselves. One shared result, no filters; refreshed in the background every cache_ttl minus 5 minutes
     background: false             # optional, with auth: app; load on demand once the result has expired, not kept refreshed
     groups: []                    # optional; restrict just this dataset to some workspace groups
     source: "Rebuilt by the nightly trips job at 02:00 UTC"   # optional; see below
@@ -183,6 +183,28 @@ python scripts/check.py --env dev --profile <profile> --warehouse <id>   # runs 
 
 The pull request pipeline runs the first line. Each deployment runs the second against its own environment.
 
+### Reviews the data team records
+
+Three rules stop a dashboard from loading until a person on the data team has looked at it
+([decision 0018](decisions/0018-publishing-guards.md)):
+
+- **The page code is reviewed.** `index.html` (and, for `page: artifact`, every file in `assets/`) must match its
+  SHA-256 in `src/reviewed_pages.yml`. The page's JavaScript runs inside the portal, so any edit needs a new review.
+- **Shared SQL is reviewed.** Every `cache: shared` dataset (and so every warmed one) must match its SHA-256 in
+  `src/shared_cache.yml`. One result is served to every viewer, so the reviewer checks that the SQL and its views
+  give the same rows to everyone: no row filters, column masks or `current_user()`.
+- **`auth: app` names its audience.** A dataset read as the app needs `groups:` on the dashboard and on the dataset.
+
+After reviewing, the reviewer records the digests in the same pull request:
+
+```bash
+python scripts/approve.py <slug>            # prints the entries
+python scripts/approve.py <slug> --write    # writes them into src/reviewed_pages.yml and src/shared_cache.yml
+```
+
+The digest is of the file's UTF-8 text with LF line endings, so a Windows checkout gives the same value. Authors
+don't need to run this; until it is done, `check.py` reports which file has no matching review.
+
 ## 6. Record what it replaces
 
 In the dashboard's `README.md`, list the Power BI pages it replaces, any intended differences, and the numbers
@@ -192,7 +214,7 @@ says what it shows and how its numbers were checked; see `src/dashboards/city-tr
 ## 7. Open a pull request
 
 Branch from `main`, then follow [PROMOTION.md](PROMOTION.md). Reviewers check the SQL (cost, grain, tables),
-the access settings, and the reconciliation.
+the access settings, the page code and the reconciliation, then record the reviews (step 5).
 
 ## Importing a Claude dashboard
 

@@ -34,6 +34,8 @@ to their own workspaces. Contributions to this repo go straight to `main`.
 
 - **One change.** Two unrelated fixes are two pull requests.
 - **Tests** for new behaviour, in `tests/`. Tests must pass in any environment (see [AGENTS.md](AGENTS.md)).
+- **Reviews recorded** for a new or changed sample page or `cache: shared` SQL: `python scripts/approve.py <slug>
+  --write` updates `src/reviewed_pages.yml` and `src/shared_cache.yml` (see [docs/AUTHORING.md](docs/AUTHORING.md)).
 - **A decision record** in [docs/decisions/](docs/decisions/README.md) for a design change: what, why, the
   alternatives, and the limits.
 - **No company data.** Sample dashboards read only the built-in `samples` catalog. Never commit workspace hosts,

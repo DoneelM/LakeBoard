@@ -268,8 +268,10 @@ with your CLI profile and warehouse, pass `scripts/check.py` and `pytest`, then 
 
 ## Deployment
 Two example pipelines do the same thing; use whichever matches your git host.
-- **Every PR:** `scripts/check.py --static` and `pytest` (Azure DevOps also runs `databricks bundle validate`).
-- **Push to `develop` / `release` / `main`:** run every dataset with `LIMIT 0` against that environment's
+- **Every PR:** `scripts/check.py --static` and `pytest`, with no workspace credentials. These include the page
+  and shared-SQL reviews (`src/reviewed_pages.yml`, `src/shared_cache.yml`; decision 0018).
+- **Push to `develop` / `release` / `main`:** install a pinned, checksum-verified Databricks CLI,
+  `databricks bundle validate`, run every dataset with `LIMIT 0` against that environment's
   catalogs, build the source map, `databricks bundle deploy`, then `databricks bundle run portal`. Dev and test are
   stopped afterwards. Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a

@@ -51,12 +51,20 @@ def render(name: str, **values: str) -> str:
     return out.replace("[[page]]", page) if page is not None else out
 
 
+LOCAL_RUN = is_local_run()  # a developer's own run: drafts are shown to them (decision 0011)
+
+
+def blocking_errors(d: Dashboard, local: bool = False) -> list[str]:
+    """What stops a dashboard loading. A developer's local run still shows a page or shared SQL that is waiting
+    for the data team's review (decision 0018); a deployed app never does."""
+    return [e for e in d.errors if not (local and e in d.unreviewed)]
+
+
 DASHBOARDS = load_all(env=ENV)
 for d in DASHBOARDS.values():
     for err in d.errors:
-        log.error("dashboard %s: %s", d.slug, err)
-LIVE = {k: v for k, v in DASHBOARDS.items() if not v.errors and ENV in v.environments}
-LOCAL_RUN = is_local_run()  # a developer's own run: drafts are shown to them (decision 0011)
+        (log.warning if LOCAL_RUN and err in d.unreviewed else log.error)("dashboard %s: %s", d.slug, err)
+LIVE = {k: v for k, v in DASHBOARDS.items() if not blocking_errors(v, LOCAL_RUN) and ENV in v.environments}
 PREVIEW_SNAPSHOTS = snapshots.preview_enabled()  # local only: todo datasets serve their snapshot rows
 if PREVIEW_SNAPSHOTS:
     log.warning("snapshot preview is on: todo datasets serve rows from their local snapshots/ file, not Databricks")

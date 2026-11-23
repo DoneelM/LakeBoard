@@ -32,8 +32,10 @@ permissions:
   id-token: write   # only needed for GitHub OIDC auth
 
 jobs:
+  # No secrets or environments here: pull requests (including ones from forks) only run credential-free checks,
+  # including the page and shared-SQL reviews in src/reviewed_pages.yml and src/shared_cache.yml (decision 0018).
   checks:
-    name: Checks (manifests, SQL rules, tests)
+    name: Checks (manifests, SQL rules, reviews, tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,8 +84,22 @@ jobs:
           python-version: "3.11"
       - run: pip install -r src/requirements.txt
         if: steps.setup.outputs.ready == 'true'
-      - uses: databricks/setup-cli@main
+      # A pinned CLI release checked against its SHA-256, instead of a moving installer (decision 0018). To upgrade,
+      # change both version and sha256, as in pipelines/deploy-steps.yml.
+      - name: Install the checksum-verified Databricks CLI
         if: steps.setup.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          version=1.14.1
+          archive="databricks_cli_${version}_linux_amd64.zip"
+          sha256=06ecb5a3299a3ef85d0ec7095fa193dd28bc12834f59e9ba399846b3af2fbfe8
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          curl --fail --silent --show-error --location "https://github.com/databricks/cli/releases/download/v${version}/${archive}" -o "$tmp/$archive"
+          printf '%s  %s\n' "$sha256" "$tmp/$archive" | sha256sum --check --strict
+          unzip -q "$tmp/$archive" databricks -d "$tmp"
+          sudo install -m 0755 "$tmp/databricks" /usr/local/bin/databricks
+          databricks --version
 
       - name: Validate bundle
         if: steps.setup.outputs.ready == 'true'

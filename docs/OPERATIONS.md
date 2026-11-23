@@ -29,7 +29,12 @@ Say a dashboard shows contract prices to everyone who can open it. To limit that
    Catalog controls what the person can query anywhere.
 
 Group names are the group display names as they appear in the Databricks workspace (account groups, or groups
-synced from your identity provider).
+synced from your identity provider). The portal caches each person's groups for one minute, so a removed
+membership stops counting within about a minute (plus however long Databricks takes to propagate it).
+
+An `auth: app` dataset is read as the app's service principal, so Unity Catalog no longer protects it per viewer.
+The checks refuse one unless both the dashboard and the dataset name their `groups:`
+([decision 0018](decisions/0018-publishing-guards.md)).
 
 ### The sample dashboards
 
