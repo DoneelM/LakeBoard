@@ -43,7 +43,7 @@ TIMEOUT = 10.0           # seconds for the whole /sources request; unresolved ta
 # including quoted identifiers, comma-qualified references, UDFs, and common changing SQL expressions.
 REFRESH_UNCERTAIN = re.compile(
     r"\b(?:current_(?:date|timestamp|time|catalog|schema|database|user|timezone)"
-    r"|localtimestamp|now|curdate|getdate|getutcdate|sysdate|today|session_user|user|rand|random|randn|uuid"
+    r"|localtimestamp|unix_timestamp|now|curdate|getdate|getutcdate|sysdate|today|session_user|user|rand|random|randn|uuid"
     r"|monotonically_increasing_id|spark_partition_id)\b"
     r"|,\s*\w+\s*\.\s*\w+\s*\.\s*\w+|\b\w+\s*\.\s*\w+\s*\(",
     re.IGNORECASE,

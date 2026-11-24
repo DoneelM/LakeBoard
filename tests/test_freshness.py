@@ -506,11 +506,16 @@ def test_conditional_dataset_response_only_omits_a_valid_cached_result(api, monk
     path = "/api/d/daily-orders/data/orders"
     first = client.get(path)
     headers = {"If-None-Match": first.headers["etag"]}
+    tick = first.json()["fetched_at"]
+    monkeypatch.setattr(data.time, "time", lambda: tick)  # a refresh in the same clock tick still needs a new ETag
     same = client.get(path, headers=headers)
     assert same.status_code == 304 and same.content == b""
     forced = client.get(path + "?refresh=1", headers=headers)
     assert forced.status_code == 200 and forced.json()["cached"] is False
+    assert forced.json()["fetched_at"] == tick and "etag" not in forced.json()
     assert forced.headers["etag"] != first.headers["etag"]
+    replaced = client.get(path, headers=headers)  # the old ETag no longer matches the replaced result
+    assert replaced.status_code == 200 and replaced.json()["cached"] is True
     monkeypatch.setattr(data, "_cache", {})  # restart, expiry or eviction also requires a result
     assert client.get(path, headers=headers).json()["cached"] is False
 
@@ -539,6 +544,7 @@ def test_refresh_checks_are_scoped_and_bypass_display_cache(api, monkeypatch):
     ("SELECT * FROM samples.tpch.orders", "changed", False, 0),
     ("SELECT * FROM samples.tpch.orders", "always", False, None),
     ("SELECT * FROM samples.tpch.orders WHERE x <= current_date()", "changed", False, None),
+    ("SELECT unix_timestamp() FROM samples.tpch.orders", "changed", False, None),
     ("SELECT * FROM samples.tpch.orders WHERE x <= :date", "changed", True, None),
     ("SELECT * FROM samples.tpch.orders, core.orders.order_exceptions", "changed", False, None),
     ("SELECT * FROM main_prod.operations.daily_orders_vw", "changed", False, None),
