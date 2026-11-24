@@ -109,17 +109,30 @@ DRAFT_BADGE = '<span class="pn-draft" title="Draft: not published yet; only some
 
 
 def nav_html(user: User, active: str | None) -> str:
-    """Left navigation: one block per section, listing the dashboards this user may open."""
+    """Left navigation: one block per section, listing the dashboards this user may open.
+
+    Dashboards in a section that share a `group:` sit under one collapsible sub-menu (decision 0017).
+    """
     out = []
     for section in SECTIONS:
         items = [d for d in LIVE.values() if d.section == section and may_open(user, d)]
         if not items:
             continue
-        links = ""
-        for d in items:
+
+        def link(d) -> str:
             current = ' aria-current="page"' if d.slug == active else ""
             badge = DRAFT_BADGE if d.draft else ""
-            links += f'<li><a href="/d/{d.slug}"{current} title="{html.escape(d.description)}">{html.escape(d.title)}{badge}</a></li>'
+            return f'<li><a href="/d/{d.slug}"{current} title="{html.escape(d.description)}">{html.escape(d.title)}{badge}</a></li>'
+
+        links, done = "", set()
+        for d in items:  # a group sits where its first dashboard would; ungrouped dashboards stay top level
+            if not d.group:
+                links += link(d)
+            elif d.group not in done:
+                done.add(d.group)
+                members = "".join(link(m) for m in items if m.group == d.group)
+                links += (f'<li class="pn-group"><details open><summary>{html.escape(d.group)}</summary>'
+                          f'<ul>{members}</ul></details></li>')
         out.append(f'<div class="pn-section"><h2>{html.escape(section)}</h2><ul>{links}</ul></div>')
     return "\n".join(out) or '<p class="pn-empty">No dashboards are shared with you yet.</p>'
 

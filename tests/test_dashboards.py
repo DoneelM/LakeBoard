@@ -606,3 +606,39 @@ def test_local_hosts_override_the_committed_ones(tmp_path):
     missing.write_text("environments:\n  staging: {host: x}\n")
     with pytest.raises(ValueError, match="staging"):
         settings.with_local_hosts(cfg, missing)
+
+
+# ---------- navigation sub-menus (`group:`, decision 0017) ----------
+
+NAV_SQL = {"x": "SELECT 1 AS n FROM samples.tpch.region"}
+
+
+def nav_board(make_dashboard, slug, order, group_line=""):
+    manifest = f"title: {slug.upper()}\nsection: Samples\norder: {order}\n{group_line}\ndatasets:\n  x: {{sql: sql/x.sql}}\n"
+    return load_dashboard(make_dashboard(slug, manifest, NAV_SQL), env="prod")
+
+
+def test_group_is_optional_short_text(make_dashboard):
+    assert nav_board(make_dashboard, "plain", 1).group == ""
+    ok = nav_board(make_dashboard, "ok", 1, "group: Trip Reports")
+    assert ok.errors == [] and ok.group == "Trip Reports" and ok.catalogue_entry()["group"] == "Trip Reports"
+    for bad in ("group: " + "x" * 41, "group: [a, b]", "group: ' padded '"):
+        board = nav_board(make_dashboard, f"bad{len(bad)}", 1, bad)
+        assert any("group must be" in e for e in board.errors), bad
+        assert board.group == ""
+
+
+def test_nav_puts_a_group_where_its_first_dashboard_would_be(make_dashboard, monkeypatch):
+    import app as portal_app
+    from portal.auth import User
+
+    boards = [nav_board(make_dashboard, "a", 1), nav_board(make_dashboard, "b", 2, "group: Trips"),
+              nav_board(make_dashboard, "c", 3), nav_board(make_dashboard, "d", 4, "group: Trips")]
+    monkeypatch.setattr(portal_app, "LIVE", {b.slug: b for b in boards})
+    html = portal_app.nav_html(User(key="u", email="u@example.com", groups=frozenset(), client=None), "d")
+    assert html.count('class="pn-group"') == 1 and html.count("<summary>Trips</summary>") == 1
+    assert "<details open>" in html  # expanded by default
+    order = [html.index(f'href="/d/{s}"') for s in "abcd"]
+    assert order[0] < html.index("<summary>") < order[1] < order[3] < order[2]  # b and d grouped, before c
+    group = html[html.index('class="pn-group"'):html.index("</details>")]
+    assert '/d/b"' in group and '/d/d" aria-current="page"' in group and "/d/c" not in group
