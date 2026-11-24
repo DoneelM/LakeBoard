@@ -62,4 +62,5 @@ this repository.
 | [0014](0014-travel-operations-showcase.md) | Travel Operations personal showcase | Accepted |
 | [0015](0015-review-deployed-apps.md) | Review deployed apps | Accepted |
 | [0016](0016-selective-refresh.md) | Selective refresh and query profiling | Accepted |
+| [0017](0017-navigation-sub-menus.md) | Navigation sub-menus (`group:`) | Accepted |
 | [0018](0018-publishing-guards.md) | Publishing guards: reviewed pages and shared SQL, groups for app data, credential-free PR checks | Accepted |

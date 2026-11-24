@@ -120,10 +120,18 @@
   let refreshStatusTimer;
 
   async function refreshLoaded(force) {
-    if (refreshPending) return;
-    const loaded = Object.entries(sets).filter(([, s]) => s.status !== 'loading' && !s.refreshing);
-    if (!loaded.length) return;
+    if (refreshPending) return; // a second click while a refresh runs doesn't start another
     const status = document.getElementById('pn-refresh-status');
+    const entries = Object.entries(sets);
+    const loaded = entries.filter(([, s]) => s.status !== 'loading' && !s.refreshing);
+    // Refresh all promises every loaded dataset is re-run. While a query is still in flight (a load, a filter change
+    // or a single-dataset refresh), skipping it would report a partial refresh, and re-running it would duplicate it.
+    if (force && loaded.length !== entries.length) {
+      clearTimeout(refreshStatusTimer);
+      if (status) status.textContent = 'Wait for the current queries to finish, then use Refresh all.';
+      return;
+    }
+    if (!loaded.length) return;
     const buttons = document.querySelectorAll('.pn-refresh');
     const targets = loaded.map(([id, s]) => [id, s.request]);
     refreshPending = true;

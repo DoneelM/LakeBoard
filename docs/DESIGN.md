@@ -109,6 +109,7 @@ switched on), `libs` (extra libraries such as Leaflet), `replaces`, `genie`, and
 - Every table is `catalog.schema.table`, in a catalog listed in `src/environments.yml`.
 - Pages may not load scripts from other sites.
 - `section`, `environments` and `libs` must use values from `src/environments.yml`.
+- `group`, if set, is text of 40 characters at most with no leading or trailing spaces.
 - `page` is `lakeboard` or `artifact`; `assets/` (artifact pages only) holds flat `.js`, `.css`, image and font
   files; `status` is `live` or `draft`; `snapshot` needs `todo: true` and a `snapshots/<name>.json` path.
 - A `genie:` block names a 32-character space id per known environment, and is refused alongside `auth: app` data.
@@ -134,7 +135,9 @@ Databricks Free Edition workspace works for trying it out (serverless starter wa
 ## Navigation and brand
 
 The shell puts a fixed pane on the left, like a Power BI app: the logo and portal name, then each section with
-its dashboards in `order`. It lists only what the signed-in person may open. It collapses with the ☰ button
+its dashboards in `order`. It lists only what the signed-in person may open. Dashboards in a section that share a
+`group:` sit under one collapsible sub-menu, placed where its first dashboard would be and expanded by default
+([decision 0017](decisions/0017-navigation-sub-menus.md)). It collapses with the ☰ button
 (remembered per browser) and becomes a slide-over on narrow screens. Sections and their order are set in
 `src/environments.yml`.
 

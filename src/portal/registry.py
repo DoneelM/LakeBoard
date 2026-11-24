@@ -31,6 +31,7 @@ GENIE_KEYS = {"space_id", "sample_questions", "about"}
 GENIE_MAX_SAMPLES = 5
 GENIE_MAX_SAMPLE_LEN = 200
 GENIE_MAX_ABOUT_LEN = 600
+GROUP_MAX_LEN = 40  # `group:` on a dashboard: the sub-menu heading in the left navigation
 SOURCE_MAX_LEN = 200  # `source:` on a dataset: a short note on how its source tables are built
 PAGE_KINDS = ("lakeboard", "artifact")  # `page:`; artifact = a Claude Dashboard artifact, run as-is (decision 0011)
 STATUSES = ("live", "draft")  # `status:`; draft = only drafts_groups and the dashboard's groups see it
@@ -220,6 +221,7 @@ class Dashboard:
     page: str
     path: Path
     section: str = "Other"
+    group: str = ""  # optional `group:`: sub-menu heading inside the section in the left navigation
     environments: list[str] = field(default_factory=lambda: list(ENVIRONMENTS))
     libs: list[str] = field(default_factory=list)
     replaces: str = ""
@@ -241,7 +243,7 @@ class Dashboard:
 
     def catalogue_entry(self) -> dict:
         return {"slug": self.slug, "title": self.title, "description": self.description, "owner": self.owner,
-                "section": self.section}
+                "section": self.section, "group": self.group}
 
 
 def load_dashboard(folder: Path, env: str | None = None, approvals: Approvals | None = None) -> Dashboard:
@@ -388,6 +390,12 @@ def load_dashboard(folder: Path, env: str | None = None, approvals: Approvals | 
     section = manifest.get("section", "Other")
     if section not in SECTIONS:
         errors.append(f"section {section!r} must be one of {SECTIONS} (new sections are added in src/environments.yml)")
+    group = manifest.get("group", "")
+    if group is None:
+        group = ""
+    if not isinstance(group, str) or len(group) > GROUP_MAX_LEN or group != group.strip():
+        errors.append(f"group must be short text ({GROUP_MAX_LEN} characters at most) with no leading or trailing spaces")
+        group = ""
     envs = list(manifest.get("environments") or ENVIRONMENTS)
     for e in envs:
         if e not in ENVIRONMENTS:
@@ -401,7 +409,7 @@ def load_dashboard(folder: Path, env: str | None = None, approvals: Approvals | 
     return Dashboard(
         slug=slug, title=manifest.get("title", slug), description=manifest.get("description", ""),
         owner=manifest.get("owner", ""), groups=list(manifest.get("groups") or []), order=int(manifest.get("order", 100)),
-        datasets=datasets, params=params, page=page, path=folder, section=section, environments=envs, libs=libs,
+        datasets=datasets, params=params, page=page, path=folder, section=section, group=group, environments=envs, libs=libs,
         replaces=str(manifest.get("replaces", "")), errors=errors, genie=genie,
         page_kind=page_kind if page_kind in PAGE_KINDS else "lakeboard",
         status=status if status in STATUSES else "draft",  # an unreadable status is treated as the safer one

@@ -35,6 +35,7 @@ description: One sentence on the question this dashboard answers.   # shown on t
 owner: Samples                    # the team that owns the content
 section: Samples                  # heading in the left navigation; the list is in src/environments.yml
 order: 10                         # position within the section
+group: Trip Reports               # optional: dashboards with the same group sit under one collapsible sub-menu
 replaces: "Power BI: Taxi Trips (Operations workspace)"   # optional
 groups: []                        # workspace groups that may open it; [] = everyone who can use the portal
 environments: [dev, test]         # optional; leave out to show it everywhere. Use it to keep unfinished work out of prod
