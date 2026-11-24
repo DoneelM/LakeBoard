@@ -120,13 +120,13 @@ def test_allowed_check_expires_and_revocation_is_denied(monkeypatch):
             raise PermissionDenied("private workspace error")
     monkeypatch.setattr(data, "run_sql", run)
     guard.check(board(ds), ds, None, "u", {})
-    clock[0] += 301
+    clock[0] += guard.ALLOW_TTL + 1
     with pytest.raises(access.AccessDenied):
         guard.check(board(ds), ds, None, "u", {})
     with pytest.raises(access.AccessDenied):
         guard.check(board(ds), ds, None, "u", {})
     assert len(calls) == 2
-    clock[0] += 61
+    clock[0] += guard.DENY_TTL + 1
     with pytest.raises(access.AccessDenied):
         guard.check(board(ds), ds, None, "u", {})
     assert len(calls) == 3

@@ -55,8 +55,8 @@ class AccessUnavailable(Exception):
 
 
 class SharedAccess:
-    ALLOW_TTL = 300
-    DENY_TTL = 60
+    ALLOW_TTL = 1800
+    DENY_TTL = 300
     MAX_ENTRIES = 4096
 
     def __init__(self):

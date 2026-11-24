@@ -336,8 +336,8 @@ and [Databricks Apps monitoring](https://docs.databricks.com/aws/en/dev-tools/da
 ## Shared-result access and startup policy
 
 Every shared user-auth dataset checks the full bound query as the reader with LIMIT 0, even on a result-cache hit
-or refresh. Allowed checks last five minutes, denied checks one minute. Revoked grants may take five minutes to
-be reflected; source-read failures return 403, and unavailable checks return 502 without cached rows. `auth: app`
+or refresh. Allowed checks last 30 minutes, denied checks 5 minutes. Revoked grants may take 30 minutes to
+be reflected, and new grants up to 5 minutes; source-read failures return 403, and unavailable checks return 502 without cached rows. `auth: app`
 remains the explicit service-principal mode. Use per-viewer caching for viewer-specific row filters or masks.
 A decision covers every filter value: changing a filter does not run another check, unless the parameter is used
 inside `IDENTIFIER(...)` or a table function that reads by name or path. `TABLE_OR_VIEW_NOT_FOUND`,
