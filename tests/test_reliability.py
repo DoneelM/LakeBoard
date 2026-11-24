@@ -19,7 +19,7 @@ def board(ds):
     return SimpleNamespace(slug="test", params={"id": {"type": "INT", "default": "1"}}, datasets={"x": ds})
 
 
-def test_shared_check_binds_full_query_and_isolates_viewers_parameters_and_sql(monkeypatch):
+def test_shared_check_binds_full_query_and_isolates_viewers_and_sql(monkeypatch):
     ds, guard, calls = dataset(), access.SharedAccess(), []
     monkeypatch.setattr(data, "run_sql", lambda c, sql, p: calls.append((c, sql, p)))
     guard.check(board(ds), ds, "reader", "u1", {})
@@ -28,10 +28,87 @@ def test_shared_check_binds_full_query_and_isolates_viewers_parameters_and_sql(m
     assert calls[0][1].endswith("-- end\n) AS lakeboard_access LIMIT 0")
     assert (calls[0][2][0].type, calls[0][2][0].value) == ("INT", "1")
     guard.check(board(ds), ds, "reader", "u2", {})
-    guard.check(board(ds), ds, "reader", "u1", {"id": "2"})
     ds.sql += "\n "
     guard.check(board(ds), ds, "reader", "u1", {})
-    assert len(calls) == 4
+    assert len(calls) == 3
+
+
+def test_filter_change_reuses_decision_but_parameter_type_does_not(monkeypatch):
+    ds, guard, calls = dataset(), access.SharedAccess(), []
+    monkeypatch.setattr(data, "run_sql", lambda *a: calls.append(a[2][0].value))
+    for value in ("1", "2", "3", ""):
+        guard.check(board(ds), ds, None, "u", {"id": value})
+    assert calls == ["1"]
+    other = board(ds)
+    other.params["id"]["type"] = "BIGINT"
+    guard.check(other, ds, None, "u", {"id": "2"})
+    assert len(calls) == 2
+
+
+def test_identifier_parameters_still_key_by_value(monkeypatch):
+    ds = Dataset(id="x", title="X", params=["tbl", "id"], cache_ttl=60, auth="user", shared=True,
+                 sql="SELECT o_orderdate FROM samples.tpch.orders, IDENTIFIER('samples.tpch.' || :tbl) "
+                     "WHERE o_orderkey = :id")
+    d = SimpleNamespace(slug="test", datasets={"x": ds}, params={
+        "tbl": {"type": "STRING", "default": "lineitem"}, "id": {"type": "INT", "default": "1"}})
+    guard, calls = access.SharedAccess(), []
+    monkeypatch.setattr(data, "run_sql", lambda *a: calls.append(1))
+    guard.check(d, ds, None, "u", {"id": "1"})
+    guard.check(d, ds, None, "u", {"id": "2"})
+    assert len(calls) == 1
+    guard.check(d, ds, None, "u", {"tbl": "customer", "id": "2"})
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("sql, expected", [
+    ("SELECT * FROM samples.tpch.orders WHERE o_orderkey = :id AND o_orderdate >= :start", set()),
+    ("SELECT * FROM IDENTIFIER(:tbl) WHERE o_orderkey = :id", {"tbl"}),
+    ("SELECT IDENTIFIER(concat(:prefix, 'name')) FROM samples.tpch.orders WHERE o_orderkey = :id", {"prefix"}),
+    ("SELECT * FROM samples.tpch.orders, read_files(:path) WHERE o_orderkey = :id", {"path"}),
+    ("SELECT * FROM samples.tpch.orders, table_changes(:tbl, 1) -- IDENTIFIER(:id)", {"tbl"}),
+    ("SELECT ':id', IDENTIFIER('samples.tpch.orders') FROM samples.tpch.orders WHERE o_orderkey = :id", set()),
+])
+def test_naming_params_finds_parameters_that_choose_objects(sql, expected):
+    assert access.naming_params(sql) == expected
+
+
+@pytest.mark.parametrize("message", [
+    "[TABLE_OR_VIEW_NOT_FOUND] The table or view `samples`.`tpch`.`orders` cannot be found. SQLSTATE: 42P01",
+    "[SCHEMA_NOT_FOUND] The schema `samples`.`tpch` cannot be found. SQLSTATE: 42704",
+    "[CATALOG_NOT_FOUND] The catalog `samples` cannot be found. SQLSTATE: 42704",
+])
+def test_not_found_is_remembered_as_denial_for_the_denial_period(monkeypatch, message):
+    ds, guard, calls, clock = dataset(), access.SharedAccess(), [], [100.0]
+    monkeypatch.setattr(access.time, "monotonic", lambda: clock[0])
+    def run(*args):
+        calls.append(1)
+        raise data.QueryError(message, "BAD_REQUEST")
+    monkeypatch.setattr(data, "run_sql", run)
+    for _ in range(2):
+        with pytest.raises(access.AccessDenied) as err:
+            guard.check(board(ds), ds, None, "u", {})
+        assert "samples" not in str(err.value)
+    assert len(calls) == 1
+    clock[0] += guard.DENY_TTL + 1
+    with pytest.raises(access.AccessDenied):
+        guard.check(board(ds), ds, None, "u", {})
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("message", [
+    "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column cannot be resolved. SQLSTATE: 42703",
+    "Warehouse not found",
+])
+def test_other_query_errors_are_not_remembered(monkeypatch, message):
+    ds, guard, calls = dataset(), access.SharedAccess(), []
+    def run(*args):
+        calls.append(1)
+        raise data.QueryError(message, "BAD_REQUEST")
+    monkeypatch.setattr(data, "run_sql", run)
+    for _ in range(2):
+        with pytest.raises(access.AccessUnavailable):
+            guard.check(board(ds), ds, None, "u", {})
+    assert len(calls) == 2 and not guard._entries
 
 
 def test_allowed_check_expires_and_revocation_is_denied(monkeypatch):
