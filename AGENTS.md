@@ -63,5 +63,6 @@ skills and instruction files should link to the shared workflow rather than dupl
 | Run locally | `./scripts/run_local.sh <cli-profile> <warehouse-id> [dev\|test\|prod]` or `./scripts/run_local.ps1 -Profile <p> -Warehouse <id> [-Env prod]` |
 | Static checks | `python scripts/check.py --static; python -m pytest -q` |
 | Run every query (LIMIT 0) | `python scripts/check.py --env dev --profile <profile> --warehouse <id>` |
+| Record a data-team review (a person, after reading the page and shared SQL) | `python scripts/approve.py <slug> --write` |
 | Show app grants | `python scripts/grant_app_access.py --env <env> --profile <profile> --warehouse <id>` (prints; `--apply` is for a person) |
 | Power BI usage | `python scripts/powerbi_usage.py --days 28` |

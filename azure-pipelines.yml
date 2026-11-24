@@ -4,7 +4,7 @@ name: lakeboard-$(Date:yyyyMMdd)$(Rev:.r)
 #   Push to develop  -> checks + deploy DEV
 #   Push to release  -> checks + deploy TEST
 #   Push to main     -> checks + deploy PROD
-#   PR to develop / release / main -> checks only (no deploy)
+#   PR to develop / release / main -> credential-free checks only (no deploy, no service connection, no variables)
 # Replace the placeholders before use:
 #   - databricks-service-connection: an Azure Resource Manager service connection for a service principal that can
 #     deploy bundles and apps in each workspace.
@@ -13,6 +13,9 @@ name: lakeboard-$(Date:yyyyMMdd)$(Rev:.r)
 # Each deploy stage has `lockBehavior: sequential`, so two runs never deploy to the same environment at once (each
 # environment is one branch, one stage); the second waits for the first. See docs/decisions/0005.
 # docs/PROMOTION.md describes how a change moves through the three branches.
+# The `pr:` trigger below applies to GitHub-hosted repos; for Azure Repos, add this pipeline as build validation in
+# each branch policy. Either way, protect the service connection and variable groups with pipeline permissions and
+# branch checks in Azure DevOps: a YAML condition alone can't stop an edited pipeline in a PR using them (decision 0018).
 
 trigger:
   branches:
@@ -43,9 +46,7 @@ stages:
 # Runs on: all PRs and all pushes to develop/release/main
 # =========================
 - stage: Validate
-  displayName: Checks and bundle validate
-  variables:
-    - group: lakeboard-dev-vars
+  displayName: Credential-free checks
   jobs:
   - job: checks
     steps:
@@ -58,33 +59,10 @@ stages:
     - script: pip install -r src/requirements.txt fastapi pytest httpx
       displayName: Install
 
-    - script: python scripts/check.py --static && pytest -q
-      displayName: Dashboard checks (manifests, SQL rules, page rules)
-
-    - task: AzureCLI@2
-      displayName: "Get Databricks Token"
-      inputs:
-        azureSubscription: 'databricks-service-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-          # 2ff814a6-... is the fixed application id of Azure Databricks (the same in every tenant).
-          TOKEN=$(az account get-access-token \
-            --resource 2ff814a6-3304-4ab8-85cb-cd0e6f879c1d \
-            --query accessToken -o tsv)
-
-          echo "##vso[task.setvariable variable=DATABRICKS_TOKEN;issecret=true]$TOKEN"
-
-    - script: |
-        curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | bash
-        databricks --version
-      displayName: Install Databricks CLI
-
-    - script: databricks bundle validate -t dev
-      displayName: Validate Bundle
-      env:
-        DATABRICKS_HOST: $(DATABRICKS_HOST)
-        DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+    # Includes the reviewed-page and shared-SQL approvals (src/reviewed_pages.yml, src/shared_cache.yml).
+    # `bundle validate` needs workspace credentials, so it runs in the deploy stages (pipelines/deploy-steps.yml).
+    - script: python scripts/check.py --static && python -m pytest -q
+      displayName: Dashboard checks (manifests, SQL rules, page rules, reviews)
 
 # =========================
 # STAGE 2 - DEPLOY DEV (push to develop)
@@ -93,7 +71,7 @@ stages:
   displayName: Deploy to Dev
   lockBehavior: sequential   # one run at a time in this stage; later runs wait their turn (see header)
   dependsOn: Validate
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
   variables:
     - group: lakeboard-dev-vars
   jobs:
@@ -112,7 +90,7 @@ stages:
   displayName: Deploy to Test
   lockBehavior: sequential   # one run at a time in this stage; later runs wait their turn (see header)
   dependsOn: Validate
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/release'))
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/release'))
   variables:
     - group: lakeboard-test-vars
   jobs:
@@ -131,7 +109,7 @@ stages:
   displayName: Deploy to Prod
   lockBehavior: sequential   # one run at a time in this stage; later runs wait their turn (see header)
   dependsOn: Validate
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
   variables:
     - group: lakeboard-prod-vars
   jobs:

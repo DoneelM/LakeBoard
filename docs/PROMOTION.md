@@ -48,8 +48,8 @@ never rides along to test or prod.
 
 | When | What runs |
 |---|---|
-| Any PR into `develop`, `release` or `main` | Dashboard checks (`scripts/check.py --static`, `pytest`). Azure DevOps also runs `databricks bundle validate` |
-| Push (merge) into one of the three branches | The same checks, then for that environment: `bundle validate`, every dataset query with `LIMIT 0` against its catalogs, the source map for the freshness label, `bundle deploy`, and `bundle run portal` (starts the app with the new code) |
+| Any PR into `develop`, `release` or `main` | Credential-free checks only: `scripts/check.py --static` (including the page and shared-SQL reviews) and `pytest`. No service connection, variable group or secret is used |
+| Push (merge) into one of the three branches | The same checks, then for that environment: install the pinned, checksum-verified Databricks CLI, `bundle validate`, every dataset query with `LIMIT 0` against its catalogs, the source map for the freshness label, `bundle deploy`, and `bundle run portal` (starts the app with the new code) |
 | After a dev or test deploy | The app is stopped again to save cost. To keep it up, run the pipeline by hand with "keep running" ticked (`keep_running` in GitHub Actions, "Leave the dev/test app running" in Azure DevOps) |
 | Two runs for the same environment overlap | The second waits until the first has finished, then deploys its own commit (GitHub: a `concurrency` group per environment; Azure DevOps: `lockBehavior: sequential`). Runs for different environments don't wait for each other |
 
@@ -76,9 +76,13 @@ Removing the line is a normal change that goes through the same three PRs.
   id and secret (or an OIDC federation policy). Add required reviewers on `prod` if a person should approve each
   prod deploy.
 - **Azure DevOps:** create the pipeline from `azure-pipelines.yml` and authorise it to use the service connection
-  and the three variable groups.
+  and the three variable groups. Restrict them to the protected branches (pipeline permissions and branch control
+  checks): a YAML condition can't stop an edited pipeline in a pull request from using them. For Azure Repos, add the
+  pipeline as build validation in each branch policy (the `pr:` trigger only applies to GitHub-hosted repos).
 - Branch protection (or branch policies) on `develop`, `release` and `main`: require a PR, the checks, and a data
-  team reviewer.
+  team reviewer. Make the data team the required reviewers (CODEOWNERS on GitHub, required reviewers by path on
+  Azure DevOps) for `src/reviewed_pages.yml`, `src/shared_cache.yml` and `src/static/`, so an author can't approve
+  their own page.
 - Serverless SQL warehouses are a good fit: they start quickly and stop when idle. A warehouse shared with other
   tools works, but portal queries then queue behind theirs.
 - If an app with the same name already exists in a workspace (for example one created by hand), delete it or
