@@ -422,8 +422,11 @@
       return e;
     };
 
-    const tableKind = (t) => {
-      if (t.kind === 'managed' && t.updated_at != null) return `changed ${ago(t.updated_at)} (${when(t.updated_at)})`;
+    const tableKind = (t, fetchedAt) => {
+      if (t.kind === 'managed' && t.updated_at != null) {
+        const base = `changed ${ago(t.updated_at)} (${when(t.updated_at)})`;
+        return t.updated_at > fetchedAt ? `${base}, ${window.LakeBoardSourceGroups.span(t.updated_at - fetchedAt)} after your data` : base;
+      }
       if (t.kind === 'live') return t.via ? `live (${t.via})` : 'live, federated';
       if (t.kind === 'external') return 'external, change time not tracked';
       if (t.kind === 'none') return 'reads no table';
@@ -479,7 +482,7 @@
             const ul = el('ul');
             for (const t of groups[key]) {
               const li = el('li', key === 'changed' ? 'pn-fresh-changed' : '');
-              li.append(el('span', 'pn-fresh-tname', t.name), document.createTextNode(` — ${tableKind(t)}`));
+              li.append(el('span', 'pn-fresh-tname', t.name), document.createTextNode(` — ${tableKind(t, s.fetchedAt)}`));
               if (key === 'changed') li.append(el('strong', 'pn-fresh-tag', 'new since your data'));
               ul.append(li);
             }
