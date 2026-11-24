@@ -8,6 +8,7 @@ import os
 import threading
 import time
 from datetime import date
+from uuid import uuid4
 
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import Disposition, Format, StatementParameterListItem, StatementState
@@ -107,6 +108,9 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
         payload = {**run_sql(client, ds.sql, params, dataset=f"{dashboard.slug}/{ds.id}"),
                    "query_started_at": query_started_at}
         now = time.time()
+        # A fresh validator per result: fetched_at can repeat within one clock tick (about 15 ms on Windows), and a
+        # repeated ETag would let a client keep a superseded result after a refresh replaced it.
+        payload = {**payload, "etag": uuid4().hex}
         _cache[key] = (now + ds.cache_ttl, now, payload)
         return {**payload, "fetched_at": now, "expires_at": now + ds.cache_ttl, "cached": False}
 

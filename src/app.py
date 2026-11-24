@@ -247,7 +247,8 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
     except data.QueryError as e:
         log.warning("%s/%s failed: %s", slug, dataset_id, e)
         return JSONResponse({"error": str(e)}, status_code=502)
-    headers = {"Cache-Control": "private, no-store", "ETag": f'"{payload["fetched_at"]}"'}
+    etag = payload.pop("etag")  # payload is a copy of the cache entry, so this doesn't change the cache
+    headers = {"Cache-Control": "private, no-store", "ETag": f'"{etag}"'}
     if not refresh and payload["cached"] and request.headers.get("if-none-match") == headers["ETag"]:
         return Response(status_code=304, headers=headers)
     return JSONResponse({**payload, "cache": ds.cache_kind, "data_through": data.data_through(ds, payload)}, headers=headers)

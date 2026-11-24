@@ -135,6 +135,10 @@ Notes:
   unavailable metadata, time-dependent SQL and datasets configured with `refresh: always`. A missing or expired
   result also needs a query. For a join, a change on either side reruns the complete dataset query.
 - **Refresh all** bypasses the result cache for every loaded dataset. A dataset the page hasn't asked for yet still loads on demand.
+  While any query on the page is still running, it does nothing and asks you to wait, so it never skips or duplicates a
+  query. A second press of either button during a refresh is ignored.
+- Every new result gets its own random ETag, so a result that replaced another never matches the old one's ETag, even
+  when both were fetched within the same clock tick.
 - A new shared or app-auth result replaces the shared cache entry. A per-viewer result replaces that viewer's entry.
   The page reports how many results were updated, unchanged or failed.
 - Changing a filter that is sent to SQL reloads only the datasets that use it. They use the cache if it already holds that combination. Other filters work in the browser and run nothing.
