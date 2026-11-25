@@ -119,6 +119,9 @@ def prune() -> None:
     now = time.time()
     for k in [k for k, v in _cache.items() if v[0] < now - 3600]:
         _cache.pop(k, None)
+    with _locks_guard:  # never a lock whose key is cached or mid-fetch, or fetch() could run one key twice
+        for k in [k for k, lock in _locks.items() if k not in _cache and not lock.locked()]:
+            del _locks[k]
 
 
 def data_through(ds: Dataset, payload: dict) -> str | None:
