@@ -154,7 +154,7 @@ same logo with `{{LOGO}}`. `locale:` sets how numbers and dates are written.
 | What data a user sees | `auth: user` (default): the query runs with the user's token, so UC grants, row filters and masks apply |
 | Cache isolation | `auth: user` results are cached **per user**; `auth: app` results are shared, so only use it for data every viewer of that dashboard may see |
 | Part of a dashboard | `groups` on a dataset; the server refuses it to anyone else ([OPERATIONS.md](OPERATIONS.md)) |
-| What a page can do | A Content-Security-Policy lets the browser load scripts and data only from the portal (plus Google Fonts and OpenStreetMap tiles), so a page can't send data elsewhere |
+| What a page can do | A Content-Security-Policy lets the browser load scripts and data only from the portal (fonts are served by the portal itself: Inter, SIL OFL, `src/static/fonts/`; only OpenStreetMap tiles are allowed from elsewhere), so a page can't send data elsewhere. Framing is limited to the portal's own origin (`frame-ancestors 'self'`) |
 | What SQL can read | Read-only statements, and only catalogs on the allow-list |
 | Runaway queries | Stopped after 10 minutes; results capped at 500,000 rows |
 | Ask Genie | Always called with the viewer's token, after the same dashboard `groups` check; not offered on dashboards with `auth: app` data. Questions and answers are shown as text only |

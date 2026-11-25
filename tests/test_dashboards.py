@@ -233,6 +233,17 @@ def test_health_endpoints(client, path):
     assert res.status_code == 200
     assert res.json()["ok"] is True
 
+
+def test_csp_frames_self_and_fonts_are_self_hosted(client):
+    import app as portal_app
+    csp = client.get("/healthz").headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self'" in csp
+    assert "googleapis" not in csp and "gstatic" not in csp
+    font = client.get("/static/fonts/inter-latin.woff2")
+    assert font.status_code == 200 and font.content.startswith(b"wOF2")
+    assert "fonts.googleapis.com" not in portal_app.TEMPLATES["shell"]
+
+
 # --- Ask Genie: manifest rules ---
 
 SPACE = "01f154d08a811926afe043c48276059f"

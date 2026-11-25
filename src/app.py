@@ -28,17 +28,18 @@ ENV = current_env()
 sources.load_map(ENV)  # deploy-time view map for the freshness label, if built for this environment
 VERSION = str(int(time.time()))  # added to static URLs so browsers pick up new files after a deploy
 
-# Pages run with the viewer's data access, so the browser may only talk to this app (plus fonts and map tiles).
+# Pages run with the viewer's data access, so the browser may only talk to this app (plus map tiles).
 CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     "img-src 'self' data: blob: " + " ".join(IMAGE_HOSTS),
     "connect-src 'self'",
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
+    "frame-ancestors 'self'",
 ])
 
 
