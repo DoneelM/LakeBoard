@@ -51,6 +51,16 @@ def test_unexpired_identities_are_kept(monkeypatch, clock, identities):
     assert {u.email for _, u in auth._identities.values()} == {"alice", "bob"}
 
 
+def test_concurrent_eviction_of_one_expired_identity_does_not_raise(monkeypatch, clock, identities):
+    from concurrent.futures import ThreadPoolExecutor
+    sign_in(monkeypatch, "alice")
+    clock[0] += auth._IDENTITY_TTL + 1
+    req = SimpleNamespace(headers={"x-forwarded-access-token": "alice"})
+    with ThreadPoolExecutor(16) as pool:
+        for f in [pool.submit(auth.current_user, req) for _ in range(64)]:
+            f.result()  # re-raises a KeyError from a double delete
+
+
 def test_locks_stay_bounded_as_cache_keys_expire(clock, caches):
     for i in range(50):
         data._cache[f"k{i}"] = (clock[0], clock[0], {})
