@@ -71,6 +71,65 @@ def is_local_run(environ=None) -> bool:
     return bool(environ.get("PORTAL_LOCAL_PROFILE")) and not is_deployed(environ)
 
 
+def normalise_host(value: str | None = None, environ=None) -> str:
+    """Workspace host, lowercased, with any leading http(s):// and trailing slashes removed."""
+    if value is None:
+        environ = os.environ if environ is None else environ
+        value = environ.get("DATABRICKS_HOST", "")
+    return re.sub(r"^https?://|/+$", "", (value or "").strip().lower())
+
+
+def _https_origin(value: str) -> str:
+    """https://host or https://host:port, with no path, userinfo, query, fragment or wildcard."""
+    from urllib.parse import urlparse
+    if "*" in value:
+        raise ValueError(
+            f"FRAME_ANCESTORS entry {value!r} must be an https origin (https://host or https://host:port), with no path or wildcard"
+        )
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.path
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+        or not parsed.hostname
+    ):
+        raise ValueError(
+            f"FRAME_ANCESTORS entry {value!r} must be an https origin (https://host or https://host:port), with no path or wildcard"
+        )
+    host = parsed.hostname
+    return f"https://{host}:{parsed.port}" if parsed.port else f"https://{host}"
+
+
+def frame_ancestors(environ=None) -> list[str]:
+    """'self', then https://DATABRICKS_HOST if set, then FRAME_ANCESTORS. Raises on a bad entry."""
+    environ = os.environ if environ is None else environ
+    origins = ["'self'"]
+    host = normalise_host(environ=environ)
+    if host:
+        origins.append(f"https://{host}")
+    raw = (environ.get("FRAME_ANCESTORS") or "").strip()
+    if raw:
+        for entry in re.split(r"[,\s]+", raw):
+            if not entry:
+                continue
+            origin = _https_origin(entry)
+            if origin not in origins:
+                origins.append(origin)
+    return origins
+
+
+def x_frame_options(ancestors: list[str] | None = None, environ=None) -> str | None:
+    """SAMEORIGIN only when the app may not be framed by any other origin."""
+    if ancestors is None:
+        ancestors = frame_ancestors(environ)
+    return "SAMEORIGIN" if ancestors == ["'self'"] else None
+
+
 def current_env() -> str:
     """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST, else prod."""
     env = os.getenv("PORTAL_ENV", "").strip().lower()
@@ -78,7 +137,7 @@ def current_env() -> str:
         if env not in ENVIRONMENTS:
             raise ValueError(f"PORTAL_ENV={env!r} is not one of {sorted(ENVIRONMENTS)}")
         return env
-    host = re.sub(r"^https?://|/+$", "", os.getenv("DATABRICKS_HOST", "").strip().lower())
+    host = normalise_host()
     for name, spec in ENVIRONMENTS.items():
         if host and host == spec["host"]:
             return name

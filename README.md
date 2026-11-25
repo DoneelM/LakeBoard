@@ -158,7 +158,7 @@ the optional in-dashboard Ask Genie integration uses a curated Genie agent and i
 - **Ask Genie** about a dashboard, with the page's filters sent as context. Answers show the table and the SQL.
 - **A page kit** (`kit`): filters, KPI tiles, sortable tables with CSV and Excel export, bars, lines, maps, number
   formats. Light and dark themes from one block of CSS variables; the name, logo and locale are configuration.
-- **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites.
+- **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites. Pages can be framed by the app itself and by the workspace (`DATABRICKS_HOST`). Add further https origins, space- or comma-separated, in `FRAME_ANCESTORS` (each must be `https://host` or `https://host:port`, with no path or wildcard). A bad entry stops the app at start-up. `X-Frame-Options: SAMEORIGIN` is sent only when no other origin is allowed.
 - **Migration helpers.** A Power BI usage report (who views what) to plan the order of work, and a README template
   for recording how each dashboard reconciles with the report it replaces.
 - **Power BI projects to dashboards.** Point Claude Code at a Power BI project in git (PBIP): `scripts/pbip_summary.py`
