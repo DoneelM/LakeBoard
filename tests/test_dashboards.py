@@ -248,6 +248,37 @@ def test_csp_frames_self_and_fonts_are_self_hosted(client):
     assert "fonts.googleapis.com" not in portal_app.TEMPLATES["shell"]
 
 
+def test_frame_ancestors_derived_from_databricks_host():
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {"DATABRICKS_HOST": "https://adb-123.azuredatabricks.net/"}
+    assert frame_ancestors(env) == ["'self'", "https://adb-123.azuredatabricks.net"]
+    assert x_frame_options(environ=env) is None
+
+
+def test_frame_ancestors_appends_env_entries():
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {
+        "DATABRICKS_HOST": "workspace.example.com",
+        "FRAME_ANCESTORS": "https://apps.example.com, https://preview.example.com:443",
+    }
+    assert frame_ancestors(env) == [
+        "'self'",
+        "https://workspace.example.com",
+        "https://apps.example.com",
+        "https://preview.example.com:443",
+    ]
+    assert x_frame_options(environ=env) is None
+    assert frame_ancestors({}) == ["'self'"]
+    assert x_frame_options(environ={}) == "SAMEORIGIN"
+
+
+@pytest.mark.parametrize("bad", ["*", "http://example.com", "https://example.com/path"])
+def test_frame_ancestors_rejects_bad_entries_at_startup(bad):
+    from portal.settings import frame_ancestors
+    with pytest.raises(ValueError, match="FRAME_ANCESTORS"):
+        frame_ancestors({"FRAME_ANCESTORS": bad})
+
+
 def test_unhandled_500_sends_security_headers(monkeypatch):
     from fastapi.testclient import TestClient
     import app as portal_app

@@ -19,7 +19,7 @@ from portal import access, data, genie, snapshots, sources, usage, xlsx
 from portal.auth import LOCAL_PROFILE, User, can_open, can_open_dashboard, current_user
 from portal.registry import ASSET_TYPES, Dashboard, load_all
 from portal.settings import (BRAND, DRAFTS_GROUPS, IMAGE_HOSTS, LIBS, LOCALE, SECTIONS, TIMEZONE, WARM, current_env,
-                             is_local_run, resolve_default)
+                             frame_ancestors, is_local_run, resolve_default, x_frame_options)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("portal")
@@ -30,6 +30,9 @@ sources.load_map(ENV)  # deploy-time view map for the freshness label, if built 
 VERSION = str(int(time.time()))  # added to static URLs so browsers pick up new files after a deploy
 
 # Pages run with the viewer's data access, so the browser may only talk to this app (plus map tiles).
+# A bad FRAME_ANCESTORS value raises here so the app does not start with an open or broken policy.
+_FRAME_ANCESTORS = frame_ancestors()
+_X_FRAME_OPTIONS = x_frame_options(_FRAME_ANCESTORS)
 CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -40,7 +43,7 @@ CSP = "; ".join([
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
-    "frame-ancestors 'self'",
+    "frame-ancestors " + " ".join(_FRAME_ANCESTORS),
 ])
 
 
@@ -108,7 +111,8 @@ class SecurityHeadersMiddleware:
                 headers["X-Content-Type-Options"] = "nosniff"
                 # Send only our origin (never the path) to other sites. OpenStreetMap blocks tile requests that carry no referrer.
                 headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-                headers["X-Frame-Options"] = "SAMEORIGIN"
+                if _X_FRAME_OPTIONS:
+                    headers["X-Frame-Options"] = _X_FRAME_OPTIONS
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
