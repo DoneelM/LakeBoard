@@ -52,7 +52,7 @@ that supersedes this one.
 ## Agent-independent authoring
 
 The authoring workflow is now shared across coding agents, with optional adaptation of external prototypes.
-See [0011](0011-agent-independent-dashboard-authoring.md). The dashboard folder and hosting runtime stay the same.
+See [0012](0012-agent-independent-dashboard-authoring.md). The dashboard folder and hosting runtime stay the same.
 
 ## Links
 
