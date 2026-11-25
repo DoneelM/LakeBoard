@@ -4,16 +4,13 @@ Open LakeBoard work: its branch, pull request, task and owner. Each PR's state (
 
 | Branch | PR | Task | Owner |
 |---|---|---|---|
-| `chore/review-gate-codeowners` | [#23](https://github.com/DoneelM/LakeBoard/pull/23) | CODEOWNERS for the review gate and shared static files; this board | Hulk |
-| `chore/tidy` | [#24](https://github.com/DoneelM/LakeBoard/pull/24) | Remove `catalogue_entry`; merge the duplicate `AGENTS.md` bullets; renumber decision 0012 | Hulk |
-| `test/approve-check-ruff` | [#25](https://github.com/DoneelM/LakeBoard/pull/25) | Tests for `approve.py` and `check.py`; ruff (F, E9, B) and its 12 findings | Hulk |
-| `fix/auth-cache-eviction` | [#26](https://github.com/DoneelM/LakeBoard/pull/26) | Evict expired identities; drop locks for evicted cache keys; fail start-up on an unmatched host | Hulk |
 | `fix/csv-injection` | [#27](https://github.com/DoneelM/LakeBoard/pull/27) | CSV export: neutralise formula cells; Node tests for csv, fmt and h() | Black Widow |
 | `fix/self-host-fonts-csp` | [#28](https://github.com/DoneelM/LakeBoard/pull/28) | Self-host Inter, drop Google font hosts from the CSP, add `frame-ancestors 'self'` | Black Widow |
 | `test/playwright-smoke` | [#29](https://github.com/DoneelM/LakeBoard/pull/29) | Playwright smoke test of the local app with stubbed data | Black Widow |
 | `fix/deploy-workflow` | [#30](https://github.com/DoneelM/LakeBoard/pull/30) | Fail when `DATABRICKS_HOST` is missing on this repo; `id-token: write` on the deploy job only; pin Actions | Hulk |
 | `fix/dev-target-from-env` | [#32](https://github.com/DoneelM/LakeBoard/pull/32) | CI deploys develop from GitHub environment vars; workspace stays out of git; leave lakeboard-dev running | Hulk |
 | `docs/adr-fail-closed-host` | [#33](https://github.com/DoneelM/LakeBoard/pull/33) | Decision 0019: fail closed when the workspace host is unmatched or, in a deployed app, empty | Hulk |
+| `fix/env-fail-closed` | [#34](https://github.com/DoneelM/LakeBoard/pull/34) | Fail start-up when a deployed app has an empty DATABRICKS_HOST (re-land #31 on develop) | Hulk |
 | TBD | — | Host resolution follow-ups (Wolverine #31 L1/I1-I3) | Hulk |
 
 ## Standing permissions

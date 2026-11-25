@@ -1,7 +1,8 @@
 # 0019. Fail closed when the workspace host is unmatched or, in a deployed app, empty
 
 - **Status:** Accepted
-- **Links:** [pull request #26](https://github.com/DoneelM/LakeBoard/pull/26) (unmatched host), [pull request #31](https://github.com/DoneelM/LakeBoard/pull/31) (empty host when deployed)
+- **Date:** 2026-11-26
+- **Links:** [pull request #26](https://github.com/DoneelM/LakeBoard/pull/26) (unmatched host), [pull request #31](https://github.com/DoneelM/LakeBoard/pull/31) and [pull request #34](https://github.com/DoneelM/LakeBoard/pull/34) (empty host when deployed; #34 re-lands #31 on develop)
 
 ## Context
 `current_env()` in `src/portal/settings.py` picks the environment that drives catalog swaps. It uses `PORTAL_ENV` if
@@ -12,9 +13,10 @@ that meant a typo, a missing `environments.local.yml`, or a blank `DATABRICKS_HO
 ## Decision
 - `PORTAL_ENV`, when set to a known environment name, still wins.
 - Otherwise the host must match an environment. An unmatched host raises at start-up (#26).
-- A blank host in a deployed app also raises (#31). `is_deployed()` is true when any of `DATABRICKS_APP_NAME`,
-  `DATABRICKS_APP_URL` or `DATABRICKS_APP_PORT` is set, which Databricks Apps always does. Databricks Apps also
-  always sets `DATABRICKS_HOST`, so a blank host when deployed is a misconfiguration and must not read prod.
+- A blank host in a deployed app also raises (#31, re-landed on develop as #34). `is_deployed()` is true when any of
+  `DATABRICKS_APP_NAME`, `DATABRICKS_APP_URL` or `DATABRICKS_APP_PORT` is a non-empty value, which Databricks Apps
+  always sets. Databricks Apps also always sets `DATABRICKS_HOST`, so a blank host when deployed is a
+  misconfiguration and must not read prod.
 - A local run with a blank host and no `PORTAL_ENV` still resolves to prod. That is a known follow-up.
 
 ## Why
@@ -23,8 +25,7 @@ the misconfiguration obvious.
 
 ## Limitations
 - `PORTAL_ENV` still skips the host checks. That is intentional when every environment shares one workspace.
-- A local run with a blank host still becomes prod. Changing that is a follow-up, not part of #26 or #31.
-- Until #26 and #31 merge, a deployed app can still fall through to prod.
+- A local run with a blank host still becomes prod. Changing that is a follow-up, not part of #26 or #34.
 
 ## Alternatives considered
 - Keep the prod fallback. Rejected: a typo or a missing local file would read prod without a signal.
@@ -33,8 +34,8 @@ the misconfiguration obvious.
 - Fail on a blank host in local runs too. Deferred: local `run_local.*` often has no host, and today that means prod.
 
 ## Changing it later
-The rule is `current_env()` in `src/portal/settings.py`. The tests are in `tests/test_eviction.py`. The start-up
-errors are also listed in `docs/OPERATIONS.md` and in the header of `src/environments.yml`.
+The rule is `current_env()` in `src/portal/settings.py`. The tests are in `tests/test_eviction.py`. The unmatched-host
+and empty-host start-up errors are listed in `docs/OPERATIONS.md` and in the header of `src/environments.yml`.
 
 ## Links
 `src/portal/settings.py`, `src/environments.yml`, `docs/OPERATIONS.md` "When something goes wrong".
