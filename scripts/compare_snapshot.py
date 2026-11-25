@@ -102,16 +102,16 @@ def compare(snapshot: dict, live: dict, keys: list[str] | None = None, tolerance
         values = [c for c in common if c not in keys]
         for k, (srow,) in s_map.items():
             if k not in l_map:
-                out["only_snapshot"].append(dict(zip(keys, k)))
+                out["only_snapshot"].append(dict(zip(keys, k, strict=True)))
                 continue
             lrow = l_map[k][0]
             out["matched"] += 1
             for c in values:
                 ok, rel = same(val(srow, s_idx, c), val(lrow, l_idx, c), tolerance)
                 if not ok:
-                    out["differences"].append({"key": dict(zip(keys, k)), "column": c, "snapshot": val(srow, s_idx, c),
+                    out["differences"].append({"key": dict(zip(keys, k, strict=True)), "column": c, "snapshot": val(srow, s_idx, c),
                                                "live": val(lrow, l_idx, c), "relative": rel})
-        out["only_live"] = [dict(zip(keys, k)) for k in l_map if k not in s_map]
+        out["only_live"] = [dict(zip(keys, k, strict=True)) for k in l_map if k not in s_map]
     else:  # no usable key: compare whole rows as multisets (numbers rounded to the tolerance's precision)
         out["duplicate_keys"] = sum(len(v) - 1 for v in s_map.values()) if keys else 0
         digits = max(0, int(-math.log10(tolerance)) + 1) if tolerance > 0 else 9
@@ -133,9 +133,9 @@ def compare(snapshot: dict, live: dict, keys: list[str] | None = None, tolerance
         for k, n in s_rows.items():
             m = min(n, l_rows.get(k, 0))
             out["matched"] += m
-            out["only_snapshot"] += [dict(zip(common, k))] * (n - m)
+            out["only_snapshot"] += [dict(zip(common, k, strict=True))] * (n - m)
         for k, n in l_rows.items():
-            out["only_live"] += [dict(zip(common, k))] * (n - min(n, s_rows.get(k, 0)))
+            out["only_live"] += [dict(zip(common, k, strict=True))] * (n - min(n, s_rows.get(k, 0)))
     out["ok"] = not (out["only_snapshot_columns"] or out["only_live_columns"] or out["only_snapshot"]
                      or out["only_live"] or out["differences"]) and out["snapshot_rows"] == out["live_rows"]
     return out
