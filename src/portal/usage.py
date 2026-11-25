@@ -50,7 +50,7 @@ def _insert(client, warehouse_id: str, table: str, rows: list[tuple]) -> None:
     values = []
     for i, row in enumerate(rows):
         values.append("(" + ", ".join(f":{c}{i}" for c in COLUMNS) + ")")
-        for col, value in zip(COLUMNS, row):
+        for col, value in zip(COLUMNS, row, strict=True):
             params.append(StatementParameterListItem(name=f"{col}{i}", type="TIMESTAMP" if col == "event_time" else "STRING", value=value))
     # Only the fixed column list and generated parameter markers build SQL text.
     sql = "INSERT INTO IDENTIFIER(:usage_table) (" + ", ".join(COLUMNS) + ") VALUES " + ", ".join(values)

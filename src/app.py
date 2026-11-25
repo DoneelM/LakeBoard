@@ -8,6 +8,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 from databricks.sdk import WorkspaceClient
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -276,7 +277,7 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
 
 
 @app.get("/api/d/{slug}/sources")
-async def dataset_sources(request: Request, slug: str, check: list[str] | None = Query(None)):
+async def dataset_sources(request: Request, slug: str, check: Annotated[list[str] | None, Query()] = None):
     """Read source metadata as the app. An explicit refresh check bypasses the display metadata cache."""
     d, user = board_for(request, slug)
     allowed = {k: v for k, v in d.datasets.items() if can_open(user, v.groups) and not v.todo}
@@ -314,7 +315,7 @@ async def genie_body(request: Request) -> dict:
     try:
         body = json.loads(raw or b"{}")
     except ValueError:
-        raise HTTPException(400, "The request must be JSON")
+        raise HTTPException(400, "The request must be JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "The request must be a JSON object")
     return body
@@ -388,7 +389,7 @@ async def export_xlsx(request: Request):
             raise ValueError("The request must be a JSON object")
         content = await asyncio.to_thread(xlsx.build, body.get("sheets"))
     except (ValueError, TypeError, AttributeError, KeyError, RecursionError) as e:
-        raise HTTPException(400, str(e)[:200] or "The Excel data was not valid")
+        raise HTTPException(400, str(e)[:200] or "The Excel data was not valid") from e
     name = xlsx.safe_filename(body.get("name"))
     return Response(content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "private, no-store"})
