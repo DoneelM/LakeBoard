@@ -79,6 +79,24 @@ def test_prune_keeps_locks_for_cached_and_in_flight_keys(clock, caches):
     assert data._locks == {"cached": cached, "busy": busy}
 
 
+def test_held_retries_when_prune_drops_the_lock_before_acquire(monkeypatch, clock, caches):
+    real, calls = data._lock, []
+
+    def racing(key):
+        lock = real(key)
+        calls.append(lock)
+        if len(calls) == 1:
+            data.prune()  # key is uncached and the lock not yet held, so it is dropped
+            real(key)  # a second caller registers a new lock
+        return lock
+
+    monkeypatch.setattr(data, "_lock", racing)
+    with data._held("k"):
+        assert data._locks["k"] is calls[1] and data._locks["k"].locked()
+        assert not calls[0].locked()
+    assert len(calls) == 2
+
+
 @pytest.fixture()
 def hosts(monkeypatch):
     monkeypatch.delenv("PORTAL_ENV", raising=False)

@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 import time
+from contextlib import contextmanager
 from datetime import date
 from uuid import uuid4
 
@@ -36,6 +37,21 @@ class QueryError(Exception):
 def _lock(key: str) -> threading.Lock:
     with _locks_guard:
         return _locks.setdefault(key, threading.Lock())
+
+
+@contextmanager
+def _held(key: str):
+    while True:
+        lock = _lock(key)
+        lock.acquire()
+        with _locks_guard:
+            if _locks.get(key) is lock:
+                break
+        lock.release()  # prune() dropped it before we acquired; retry with the registered lock
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def bind(dashboard: Dashboard, ds: Dataset, raw: dict) -> list[StatementParameterListItem]:
@@ -100,7 +116,7 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
     hit = _cache.get(key)
     if hit and not refresh and hit[0] > time.time():
         return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
-    with _lock(key):  # one query per key at a time; others wait and reuse it
+    with _held(key):  # one query per key at a time; others wait and reuse it
         hit = _cache.get(key)
         if hit and not refresh and hit[0] > time.time():
             return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
