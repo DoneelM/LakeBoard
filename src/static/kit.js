@@ -94,8 +94,8 @@
       h('span', { class: 'kit-tile-label' }, t.label), h('strong', null, t.value), t.note ? h('span', { class: 'kit-tile-note' }, t.note) : null)));
   }
 
-  // Cells whose first character, or first non-whitespace character, is = + - @ TAB CR or full-width ＝＋－＠ get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
-  const formulaStart = /^[=+\-@\t\r＝＋－＠]/;
+  // Cells whose first character, or first non-whitespace character, is = + - @ TAB CR LF or full-width ＝＋－＠ get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
+  const formulaStart = /^[=+\-@\t\r\n＝＋－＠]/;
   const plainNumber = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
   const esc = (v) => {
     let s = v === null || v === undefined ? '' : String(v);

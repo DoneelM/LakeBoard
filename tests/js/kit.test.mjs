@@ -26,6 +26,9 @@ test('csvText guards formula starts', () => {
   }
   assert.equal(csvText([{ key: 'a' }], [{ a: '\rx' }]), 'a\r\n"\'\rx"');
   assert.equal(csvText([{ key: 'a' }], [{ a: '\n=1' }]), 'a\r\n"\'\n=1"');
+  // LF and CR are guarded prefixes in their own right, not only after whitespace is stripped.
+  assert.equal(csvText([{ key: 'a' }], [{ a: '\n=HYPERLINK("http://x","y")' }]), 'a\r\n"\'\n=HYPERLINK(""http://x"",""y"")"');
+  assert.equal(csvText([{ key: 'a' }], [{ a: '\nplain' }]), 'a\r\n"\'\nplain"');
   assert.equal(cell('=HYPERLINK("http://x","y")'), '"\'=HYPERLINK(""http://x"",""y"")"');
 });
 
