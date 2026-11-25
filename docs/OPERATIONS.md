@@ -78,7 +78,8 @@ conversation history in the space, where the space's managers can review them wi
 
 ## Starting and stopping (cost)
 
-The app bills while it runs. The example pipelines stop dev and test after every deployment.
+The app bills while it runs. The GitHub Actions deploy stops test after every deployment and leaves dev (`develop`)
+and prod running; the Azure DevOps pipeline stops dev and test.
 
 ```bash
 databricks -p <your-profile> apps start lakeboard-dev
@@ -92,6 +93,22 @@ Prod keeps running. To save cost out of hours, stop it in the evening with a sch
 or script task running `databricks apps stop lakeboard`, or the SDK's `w.apps.stop("lakeboard")`). Nothing has
 to start it again: the first person to open the portal does. Stopping empties the cache (see
 [How data refreshes](#how-data-refreshes)). See decision 0005 for the reasoning.
+
+### First CI deploy to an app that already exists
+
+App names are unique in a workspace, so `bundle deploy` fails with "An app with the same name already exists" for a
+`lakeboard-dev` that was created by hand. Bind it to the bundle once, **as the CI service principal** (the one whose
+client id and secret are in the GitHub `dev` environment), so the bundle state lands under that principal's
+`root_path`. The principal needs `CAN MANAGE` on the app. A person with those credentials runs, from a checkout:
+
+```bash
+databricks bundle deployment bind portal lakeboard-dev --target dev --auto-approve
+```
+
+Do this with `databricks.local.yml` and `src/environments.local.yml` in place (README "Keep your workspace out of
+git"), so the target points at the same workspace. After that every push to `develop` deploys to that app. If the
+app has settings the bundle doesn't declare (for example `budget_policy_id`), copy them into the bundle first, or the
+deploy can fail.
 
 ## How data refreshes
 

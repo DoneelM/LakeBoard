@@ -175,7 +175,8 @@ views. The portal then enforces it automatically, for every dashboard and for Ge
   federated table that takes minutes to scan) never block a reader. Shared datasets with a `warm:` list are
   refreshed at the `warm.times` in `src/environments.yml`.
 - **Warehouse use:** about one query per dataset per user per TTL. Filtering costs nothing.
-- **App use:** one always-on app per environment. Dev and test are stopped after each deploy; prod can be stopped
+- **App use:** one always-on app per environment. In GitHub Actions dev (`develop`) and prod stay running and test is stopped
+  after each deploy; the Azure DevOps pipeline still stops dev and test. Prod can be stopped
   out of hours (`databricks apps stop`) if usage allows (decision 0005).
 
 ## Freshness label
@@ -275,12 +276,13 @@ Two example pipelines do the same thing; use whichever matches your git host.
   and shared-SQL reviews (`src/reviewed_pages.yml`, `src/shared_cache.yml`; decision 0018).
 - **Push to `develop` / `release` / `main`:** install a pinned, checksum-verified Databricks CLI,
   `databricks bundle validate`, run every dataset with `LIMIT 0` against that environment's
-  catalogs, build the source map, `databricks bundle deploy`, then `databricks bundle run portal`. Dev and test are
-  stopped afterwards. Deploys to one environment run one at a time.
+  catalogs, build the source map, `databricks bundle deploy`, then `databricks bundle run portal`. Test is
+  stopped afterwards (GitHub Actions; Azure DevOps also stops dev). Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a
-  `DATABRICKS_HOST` variable and a service principal's OAuth secret (`DATABRICKS_CLIENT_ID`,
-  `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. A `concurrency` group per environment. On `DoneelM/LakeBoard`,
-  an environment with no `DATABRICKS_HOST` fails the job on `main`/`release`/`develop`; forks and unconfigured copies
+  `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variable and a service principal's OAuth secret
+  (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. The deploy writes the
+  gitignored `databricks.local.yml` and `src/environments.local.yml` from the two variables (decision 0010). A `concurrency` group per environment. On `DoneelM/LakeBoard`,
+  an environment missing any of the four values fails the job on `main`/`release`/`develop`, naming the keys; forks and unconfigured copies
   skip the deploy and write a "nothing deployed" job summary, so a fresh fork's pushes don't fail.
 - **Azure DevOps** (`azure-pipelines.yml`): the `databricks-service-connection` service connection (a placeholder);
   hosts come from the `lakeboard-<env>-vars` variable groups. `lockBehavior: sequential` per stage.

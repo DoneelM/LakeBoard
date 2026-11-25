@@ -26,7 +26,10 @@ Without the files, nothing changes.
   `environments.yml` is read by the app, not the bundle.
 
 ## Limitations
-- CI doesn't see the files. Pipelines keep using committed values or their own variables (`DATABRICKS_HOST`).
+- The files are gitignored, so a checkout in CI doesn't have them. The GitHub Actions deploy writes both from the
+  GitHub environment's `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variables just before `bundle validate`
+  (`.github/workflows/deploy.yml`), so that workspace stays out of git too. The Azure DevOps pipeline still uses
+  committed values or its own variables (`DATABRICKS_HOST`).
 - `bundle validate` warns that `src/environments.local.yml` matches no files when it isn't there (as it does for
   `src/sources_map.json`).
 - Only hosts can be overridden in `environments.local.yml`, not catalogs, sections or brand.
