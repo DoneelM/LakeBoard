@@ -236,12 +236,40 @@ def test_health_endpoints(client, path):
 
 def test_csp_frames_self_and_fonts_are_self_hosted(client):
     import app as portal_app
-    csp = client.get("/healthz").headers["Content-Security-Policy"]
+    res = client.get("/healthz")
+    csp = res.headers["Content-Security-Policy"]
     assert "frame-ancestors 'self'" in csp
+    assert "font-src 'self';" in csp
     assert "googleapis" not in csp and "gstatic" not in csp
+    assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert res.headers["X-Content-Type-Options"] == "nosniff"
     font = client.get("/static/fonts/inter-latin.woff2")
     assert font.status_code == 200 and font.content.startswith(b"wOF2")
     assert "fonts.googleapis.com" not in portal_app.TEMPLATES["shell"]
+
+
+def test_unhandled_500_sends_security_headers(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as portal_app
+    from starlette.routing import Route
+
+    async def boom(request):
+        raise RuntimeError("boom")
+
+    route = Route("/__test_boom__", boom, methods=["GET"])
+    portal_app.app.router.routes.append(route)
+    monkeypatch.setattr(portal_app, "current_user", lambda request: object())
+    try:
+        # Starlette always re-raises after sending the 500; the client must not turn that into a test failure.
+        res = TestClient(portal_app.app, raise_server_exceptions=False).get("/__test_boom__")
+        assert res.status_code == 500
+        assert "boom" not in res.text
+        assert "frame-ancestors 'self'" in res.headers["Content-Security-Policy"]
+        assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+        assert res.headers["X-Content-Type-Options"] == "nosniff"
+        assert res.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    finally:
+        portal_app.app.router.routes.remove(route)
 
 
 # --- Ask Genie: manifest rules ---
