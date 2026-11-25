@@ -68,7 +68,6 @@ jobs:
       TARGET: ${{ github.ref_name == 'main' && 'prod' || github.ref_name == 'release' && 'test' || 'dev' }}
       APP_NAME: ${{ github.ref_name == 'main' && 'lakeboard' || github.ref_name == 'release' && 'lakeboard-test' || 'lakeboard-dev' }}
       KEEP_RUNNING: ${{ github.ref_name == 'main' || github.ref_name == 'develop' || inputs.keep_running == true }}
-      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
       DATABRICKS_WAREHOUSE_ID: ${{ vars.DATABRICKS_WAREHOUSE_ID }}
       # DATABRICKS_AUTH_TYPE: github-oidc   # with OIDC instead of a client secret
       # DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET are set per step, only where Databricks is called.
@@ -82,9 +81,13 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
+          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
           HAS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID != '' }}
           HAS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' }}
         run: |
+          # Stray whitespace in the variable would make the CLI see two different hosts; later steps get the stripped one.
+          DATABRICKS_HOST="$(printf '%s' "$DATABRICKS_HOST" | tr -d '[:space:]')"
+          echo "DATABRICKS_HOST=$DATABRICKS_HOST" >> "$GITHUB_ENV"
           missing=()
           [ -n "$DATABRICKS_HOST" ] || missing+=(DATABRICKS_HOST)
           [ -n "$DATABRICKS_WAREHOUSE_ID" ] || missing+=(DATABRICKS_WAREHOUSE_ID)

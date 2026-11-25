@@ -19,9 +19,9 @@ def step(name: str) -> str:
 
 
 def run(name: str, tmp_path: Path, **env):
-    out, summary = tmp_path / "out", tmp_path / "summary"
+    out, summary, genv = tmp_path / "out", tmp_path / "summary", tmp_path / "env"
     base = {"PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}", "TARGET": "dev",
-            "GITHUB_OUTPUT": str(out), "GITHUB_STEP_SUMMARY": str(summary), "REPO": "DoneelM/LakeBoard", "BRANCH": "develop",
+            "GITHUB_OUTPUT": str(out), "GITHUB_STEP_SUMMARY": str(summary), "GITHUB_ENV": str(genv), "REPO": "DoneelM/LakeBoard", "BRANCH": "develop",
             "DATABRICKS_HOST": HOST, "DATABRICKS_WAREHOUSE_ID": "abc123def456", "HAS_CLIENT_ID": "true", "HAS_CLIENT_SECRET": "true"}
     base.update(env)
     r = subprocess.run(["bash", "-e", "-c", step(name)], cwd=tmp_path, env=base, text=True, capture_output=True, check=False)
@@ -49,6 +49,13 @@ def test_official_repo_fails_naming_each_missing_key_and_no_values(tmp_path, env
     assert r.returncode == 1 and "ready=" not in out
     assert error.split(". Nothing")[0].split(": ")[-1].split() == named
     assert "dbc-0123abcd" not in r.stdout + r.stderr and "abc123def456" not in r.stdout + r.stderr
+
+
+def test_the_host_reaches_later_steps_stripped_and_blank_counts_as_missing(tmp_path):
+    r, _ = run(CHECK, tmp_path, DATABRICKS_HOST=f"  {HOST}\n")
+    assert r.returncode == 0 and (tmp_path / "env").read_text() == f"DATABRICKS_HOST={HOST}\n"
+    r, _ = run(CHECK, tmp_path, DATABRICKS_HOST="   ")
+    assert r.returncode == 1 and "DATABRICKS_HOST" in r.stdout
 
 
 def test_oidc_needs_no_client_secret(tmp_path):
