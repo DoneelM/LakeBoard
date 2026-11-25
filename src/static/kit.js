@@ -97,7 +97,7 @@
   // Cells starting with = + - @ TAB CR get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
   const esc = (v) => {
     let s = v === null || v === undefined ? '' : String(v);
-    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s)) s = "'" + s;
+    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s)) s = "'" + s;
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const csvText = (columns, rows) => [columns.map((c) => esc(c.label || c.key)).join(','), ...rows.map((r) => columns.map((c) => esc(r[c.key])).join(','))].join('\r\n');
