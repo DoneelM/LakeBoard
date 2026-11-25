@@ -252,7 +252,7 @@ The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them
 | [docs/PROMOTION.md](docs/PROMOTION.md) | Moving a change through dev, test and prod |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Moving a report from Power BI, including who uses it today |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Access, restricting sections, cost, usage, troubleshooting |
-| [docs/board.md](docs/board.md) | Open work: branches, pull requests, status and standing permissions |
+| [docs/board.md](docs/board.md) | Open work: branches, pull requests, owners and standing permissions |
 | [docs/decisions/](docs/decisions/README.md) | Decision records: why each feature and design choice was made, and its limits |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding tools (Claude Code, Codex, Cursor) working in this repo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Proposing a change to LakeBoard itself |
