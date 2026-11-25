@@ -13,7 +13,7 @@ Open LakeBoard work: its branch, pull request, task and owner. Each PR's state (
 | `test/playwright-smoke` | [#29](https://github.com/DoneelM/LakeBoard/pull/29) | Playwright smoke test of the local app with stubbed data | Black Widow |
 | `fix/deploy-workflow` | [#30](https://github.com/DoneelM/LakeBoard/pull/30) | Fail when `DATABRICKS_HOST` is missing on this repo; `id-token: write` on the deploy job only; pin Actions | Hulk |
 | `fix/dev-target-from-env` | [#32](https://github.com/DoneelM/LakeBoard/pull/32) | CI deploys develop from GitHub environment vars; workspace stays out of git; leave lakeboard-dev running | Hulk |
-| `docs/adr-fail-closed-host` | not opened | Decision 0019: fail closed when the workspace host is unmatched or, in a deployed app, empty | Hulk |
+| `docs/adr-fail-closed-host` | [#33](https://github.com/DoneelM/LakeBoard/pull/33) | Decision 0019: fail closed when the workspace host is unmatched or, in a deployed app, empty | Hulk |
 | TBD | — | Host resolution follow-ups (Wolverine #31 L1/I1-I3) | Hulk |
 
 ## Standing permissions
