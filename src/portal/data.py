@@ -133,8 +133,9 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
 
 def prune() -> None:
     now = time.time()
-    for k in [k for k, v in _cache.items() if v[0] < now - 3600]:
-        _cache.pop(k, None)
+    for k, v in list(_cache.items()):  # a snapshot: worker threads insert while this runs
+        if v[0] < now - 3600:
+            _cache.pop(k, None)
     with _locks_guard:  # never a lock whose key is cached or mid-fetch, or fetch() could run one key twice
         for k in [k for k, lock in _locks.items() if k not in _cache and not lock.locked()]:
             del _locks[k]
@@ -175,7 +176,10 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
     scheduled = WARM_ENABLED and env in WARM.get("environments", [])
     started, last_slot = False, _warm_slot()
     while True:
-        prune()
+        try:
+            prune()
+        except Exception:  # a failed prune must not end warming
+            log.exception("prune failed")
         for d in dashboards.values():
             for ds in d.datasets.values():
                 key = f"{d.slug}/{ds.id}"

@@ -228,6 +228,24 @@ def test_startup_warming_does_not_repeat_on_schedule(monkeypatch):
     assert calls == ["startup", "regular", "regular"]
 
 
+def test_failing_prune_does_not_stop_warming(monkeypatch):
+    regular = Dataset("regular", "R", "SELECT 1", [], 60, "user", shared=True, warm=[{}])
+    d = SimpleNamespace(slug="warm", datasets={"regular": regular})
+    calls, tick = [], [0]
+    monkeypatch.setattr(data, "WARM_ENABLED", True)
+    monkeypatch.setattr(data, "WARM", {"environments": ["prod"]})
+    monkeypatch.setattr(data, "_warm_slot", lambda: "morning")
+    monkeypatch.setattr(data, "prune", lambda: (_ for _ in ()).throw(RuntimeError("changed size")))
+    monkeypatch.setattr(data, "fetch", lambda d, ds, *a: calls.append(ds.id))
+    async def sleep(_):
+        tick[0] += 1
+        raise asyncio.CancelledError
+    monkeypatch.setattr(data.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(data.warm_datasets({"warm": d}, lambda: None, "prod"))
+    assert calls == ["regular"]
+
+
 @pytest.mark.parametrize("value,extra,error", [("startup", "", "needs a warm"), ("daily", "warm: [{}]", "must be schedule or startup")])
 def test_manifest_rejects_invalid_warm_mode(make_dashboard, value, extra, error):
     manifest = f"title: Test\ndatasets:\n  x:\n    sql: sql/x.sql\n    cache: shared\n    warm_at: {value}\n    {extra}\n"
