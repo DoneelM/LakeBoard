@@ -72,8 +72,8 @@ def is_local_run(environ=None) -> bool:
 
 
 def current_env() -> str:
-    """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST. Prod only when both are unset;
-    a host that matches nothing raises rather than silently reading prod."""
+    """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST. Prod only when both are unset
+    on a local run; a host that matches nothing raises, and so does a blank host in a deployed app."""
     env = os.getenv("PORTAL_ENV", "").strip().lower()
     if env:
         if env not in ENVIRONMENTS:
@@ -85,6 +85,8 @@ def current_env() -> str:
             return name
     if host:
         raise ValueError(f"DATABRICKS_HOST={host!r} matches no host in src/environments.yml; fix the host or set PORTAL_ENV")
+    if is_deployed():
+        raise ValueError("DATABRICKS_HOST is empty in a deployed app; set it or PORTAL_ENV")
     return "prod"
 
 

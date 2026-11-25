@@ -322,6 +322,7 @@ and [Databricks Apps monitoring](https://docs.databricks.com/aws/en/dev-tools/da
 | The sample dashboards say `samples` is not found | The workspace has no `samples` catalog, or an admin has hidden it. Use a workspace that has it (Databricks Free Edition does), or switch the samples off |
 | A dashboard is missing from the navigation | The person isn't in its `groups`, it is switched off for this environment, or it failed validation (`/api/health`) |
 | App fails to start: `DATABRICKS_HOST=... matches no host` | The workspace host doesn't match `environments:` in `src/environments.yml`. Fix the host or set `PORTAL_ENV` |
+| App fails to start: `DATABRICKS_HOST is empty in a deployed app` | The deployed app has no `DATABRICKS_HOST`. Set it, or set `PORTAL_ENV`. Local runs with no host still default to prod |
 | Map tiles don't appear | The network blocks `tile.openstreetmap.org`. The points still plot |
 | Deployment fails on "Run every dataset" | A view the SQL uses doesn't exist in that environment's catalog yet, or the deploying service principal can't read it |
 | First load of a page is slow | The cache was empty (after a deployment, restart or a scheduled stop), the warehouse was busy, or the views are slow. See [How data refreshes](#how-data-refreshes). Use `cache: shared` with `warm:` if everyone sees the same data, raise `cache_ttl`, or build a pre-aggregated table |
