@@ -94,9 +94,16 @@
       h('span', { class: 'kit-tile-label' }, t.label), h('strong', null, t.value), t.note ? h('span', { class: 'kit-tile-note' }, t.note) : null)));
   }
 
+  // Cells starting with = + - @ TAB CR get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
+  const esc = (v) => {
+    let s = v === null || v === undefined ? '' : String(v);
+    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const csvText = (columns, rows) => [columns.map((c) => esc(c.label || c.key)).join(','), ...rows.map((r) => columns.map((c) => esc(r[c.key])).join(','))].join('\r\n');
+
   function csv(name, columns, rows) {
-    const esc = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const text = [columns.map((c) => esc(c.label || c.key)).join(','), ...rows.map((r) => columns.map((c) => esc(r[c.key])).join(','))].join('\r\n');
+    const text = csvText(columns, rows);
     const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv' }));
     const a = h('a', { href: url, download: String(name ?? 'export').replace(/\.csv$/i, '') + '.csv' });
     document.body.append(a); a.click(); a.remove();
@@ -247,5 +254,6 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  window.kit = { num, fmt, h, ready, filters, tiles, table, csv, xlsx, bars, line, map, colour, isoDate, daysAgo };
+  window.kit = { num, fmt, h, ready, filters, tiles, table, csv, csvText, xlsx, bars, line, map, colour, isoDate, daysAgo };
+  if (typeof module !== 'undefined' && module.exports) module.exports = window.kit;  // lets Node tests require this file
 })();
