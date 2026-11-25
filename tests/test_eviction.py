@@ -9,8 +9,8 @@ from portal import auth, data, settings
 @pytest.fixture()
 def clock(monkeypatch):
     now = [1000.0]
-    monkeypatch.setattr(auth, "time", SimpleNamespace(time=lambda: now[0]))
-    monkeypatch.setattr(data.time, "time", lambda: now[0])
+    monkeypatch.setattr(auth.time, "time", lambda: now[0])
+    monkeypatch.setattr(auth.time, "monotonic", lambda: now[0])  # auth.time is the real module, shared with data
     return now
 
 
