@@ -1,4 +1,4 @@
-# 0011. Agent-independent dashboard authoring
+# 0012. Agent-independent dashboard authoring
 
 - **Status:** In progress
 
