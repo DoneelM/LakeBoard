@@ -29,8 +29,9 @@ def _host() -> str:
 
 def current_user(request: Request) -> User:
     now = time.time()
-    for k in [k for k, v in _identities.items() if v[0] <= now]:  # expired entries still hold a client and token
-        _identities.pop(k, None)  # another request may have evicted it first
+    for k, v in list(_identities.items()):  # a snapshot: other requests insert and evict while this runs
+        if v[0] <= now:  # expired entries still hold a client and token
+            _identities.pop(k, None)  # another request may have evicted it first
     token = request.headers.get("x-forwarded-access-token")
     if token:
         cache_key = hashlib.sha256(token.encode("utf-8")).hexdigest()  # the whole token, never kept as is

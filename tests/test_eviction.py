@@ -61,6 +61,28 @@ def test_concurrent_eviction_of_one_expired_identity_does_not_raise(monkeypatch,
             f.result()  # re-raises a KeyError from a double delete
 
 
+def test_concurrent_inserts_and_evictions_do_not_raise(monkeypatch, clock, identities):
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+
+    def workspace(**kw):
+        me = SimpleNamespace(id=kw["token"], user_name=kw["token"], groups=[])
+        return SimpleNamespace(current_user=SimpleNamespace(me=lambda: me))
+
+    monkeypatch.setattr(auth, "WorkspaceClient", workspace)
+    for i in range(2000):  # expired, so every request has plenty to evict
+        auth._identities[f"old-{i}"] = (clock[0] - 1, None)
+    reqs = [SimpleNamespace(headers={"x-forwarded-access-token": f"new-{i}"}) for i in range(400)]
+    switch = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)  # switch threads often so the race is likely
+    try:
+        with ThreadPoolExecutor(32) as pool:
+            for f in [pool.submit(auth.current_user, r) for r in reqs]:
+                f.result()  # re-raises "dictionary changed size during iteration"
+    finally:
+        sys.setswitchinterval(switch)
+
+
 def test_locks_stay_bounded_as_cache_keys_expire(clock, caches):
     for i in range(50):
         data._cache[f"k{i}"] = (clock[0], clock[0], {})
