@@ -1,4 +1,13 @@
+# Owner is @DoneelM. The team's agents also push under @DoneelM, so a required code-owner review adds no second
+# reviewer until a separate reviewing identity exists.
+
+# This file: changing who owns what is itself a reviewed change.
+.github/CODEOWNERS @DoneelM
+
 # Data-team review gate: page and shared-SQL approval digests, and the script that records them.
 src/reviewed_pages.yml @DoneelM
 src/shared_cache.yml @DoneelM
 scripts/approve.py @DoneelM
+
+# Shared page JavaScript and styles every dashboard loads (docs/PROMOTION.md, decision 0018).
+src/static/ @DoneelM
