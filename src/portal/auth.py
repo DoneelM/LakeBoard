@@ -28,6 +28,10 @@ def _host() -> str:
 
 
 def current_user(request: Request) -> User:
+    now = time.monotonic()
+    for k, v in list(_identities.items()):  # a snapshot: other requests insert and evict while this runs
+        if v[0] <= now:  # expired entries still hold a client and token
+            _identities.pop(k, None)  # another request may have evicted it first
     token = request.headers.get("x-forwarded-access-token")
     if token:
         cache_key = hashlib.sha256(token.encode("utf-8")).hexdigest()  # the whole token, never kept as is
@@ -38,13 +42,13 @@ def current_user(request: Request) -> User:
     else:
         raise HTTPException(401, "No user token. Open the portal through Databricks Apps.")
     hit = _identities.get(cache_key)
-    if hit and hit[0] > time.time():
+    if hit and hit[0] > time.monotonic():
         return hit[1]
     client = make()
     me = client.current_user.me()
     user = User(key=me.id or me.user_name, email=me.user_name or "", groups=frozenset(g.display for g in (me.groups or []) if g.display),
                 client=client)
-    _identities[cache_key] = (time.time() + _IDENTITY_TTL, user)
+    _identities[cache_key] = (time.monotonic() + _IDENTITY_TTL, user)
     return user
 
 

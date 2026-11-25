@@ -14,8 +14,7 @@ them is lost.
   indented, with an accent-coloured bar down the left.
 - The heading sits where the group's first dashboard (by `order`) would. Ungrouped dashboards are unchanged.
 - The group is built with `<details open>`: expanded by default, no script, works from the keyboard.
-- The heading text is the `group:` value. Groups only affect the left navigation; home-page cards stay flat. The
-  catalogue entry (`catalogue_entry()`) carries `group` so a later home page could use it.
+- The heading text is the `group:` value. Groups only affect the left navigation; home-page cards stay flat.
 
 ## Why
 - Related dashboards stay together without inventing new sections, which are shared across the whole portal.

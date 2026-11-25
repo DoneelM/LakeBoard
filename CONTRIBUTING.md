@@ -16,7 +16,8 @@ Thanks for helping. Bug reports, docs fixes, new sample dashboards and framework
 3. Run the checks. They need no Databricks workspace:
 
    ```bash
-   python -m pip install -r src/requirements.txt pytest
+   python -m pip install -r src/requirements.txt pytest ruff
+   ruff check
    python -m pytest -q
    PORTAL_ENV=dev python -m pytest -q
    python scripts/check.py --static

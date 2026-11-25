@@ -131,7 +131,8 @@ def x_frame_options(ancestors: list[str] | None = None, environ=None) -> str | N
 
 
 def current_env() -> str:
-    """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST, else prod."""
+    """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST. Prod only when both are unset;
+    a host that matches nothing raises rather than silently reading prod."""
     env = os.getenv("PORTAL_ENV", "").strip().lower()
     if env:
         if env not in ENVIRONMENTS:
@@ -141,6 +142,8 @@ def current_env() -> str:
     for name, spec in ENVIRONMENTS.items():
         if host and host == spec["host"]:
             return name
+    if host:
+        raise ValueError(f"DATABRICKS_HOST={host!r} matches no host in src/environments.yml; fix the host or set PORTAL_ENV")
     return "prod"
 
 
