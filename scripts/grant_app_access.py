@@ -65,7 +65,7 @@ def main() -> int:
     try:
         app = w.apps.get(app_name)
     except Exception as e:
-        raise SystemExit(f"App {app_name} was not found in this workspace. Deploy it first (docs/PROMOTION.md). {str(e)[:120]}")
+        raise SystemExit(f"App {app_name} was not found in this workspace. Deploy it first (docs/PROMOTION.md). {str(e)[:120]}") from e
     principal = app.service_principal_client_id
     if not principal or not re.fullmatch(r"[0-9a-f-]{36}", principal):
         raise SystemExit(f"Could not read the service principal of app {app_name}")

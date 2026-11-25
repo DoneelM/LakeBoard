@@ -241,10 +241,6 @@ class Dashboard:
         """The Genie space for this environment, or None (no chat bar)."""
         return self.genie.space_ids.get(env) if self.genie else None
 
-    def catalogue_entry(self) -> dict:
-        return {"slug": self.slug, "title": self.title, "description": self.description, "owner": self.owner,
-                "section": self.section, "group": self.group}
-
 
 def load_dashboard(folder: Path, env: str | None = None, approvals: Approvals | None = None) -> Dashboard:
     """One dashboard. A folder under src/dashboards/ is checked against the approval files (decision 0018); a test
