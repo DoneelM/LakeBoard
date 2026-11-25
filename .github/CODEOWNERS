@@ -1,0 +1,4 @@
+# Data-team review gate: page and shared-SQL approval digests, and the script that records them.
+src/reviewed_pages.yml @DoneelM
+src/shared_cache.yml @DoneelM
+scripts/approve.py @DoneelM
