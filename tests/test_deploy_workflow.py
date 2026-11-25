@@ -53,9 +53,17 @@ def test_official_repo_fails_naming_each_missing_key_and_no_values(tmp_path, env
 
 def test_the_host_reaches_later_steps_stripped_and_blank_counts_as_missing(tmp_path):
     r, _ = run(CHECK, tmp_path, DATABRICKS_HOST=f"  {HOST}\n")
-    assert r.returncode == 0 and (tmp_path / "env").read_text() == f"DATABRICKS_HOST={HOST}\n"
+    assert r.returncode == 0 and f"DATABRICKS_HOST={HOST}\n" in (tmp_path / "env").read_text()
     r, _ = run(CHECK, tmp_path, DATABRICKS_HOST="   ")
     assert r.returncode == 1 and "DATABRICKS_HOST" in r.stdout
+
+
+def test_the_warehouse_id_reaches_later_steps_stripped_and_blank_counts_as_missing(tmp_path):
+    r, _ = run(CHECK, tmp_path, DATABRICKS_WAREHOUSE_ID="  abc123def456\n")
+    assert r.returncode == 0 and "DATABRICKS_WAREHOUSE_ID=abc123def456\n" in (tmp_path / "env").read_text()
+    r, _ = run(CHECK, tmp_path, DATABRICKS_WAREHOUSE_ID="   ")
+    assert r.returncode == 1 and "DATABRICKS_WAREHOUSE_ID" in r.stdout
+    assert "abc123def456" not in r.stdout + r.stderr
 
 
 def test_oidc_needs_no_client_secret(tmp_path):
