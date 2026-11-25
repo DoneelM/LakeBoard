@@ -6,11 +6,14 @@
 #   1. Create three GitHub environments: dev, test, prod (Settings > Environments). Add required reviewers on prod
 #      if you want a person to approve each prod deploy.
 #   2. In each environment, add:
-#        variable DATABRICKS_HOST           https://<workspace host>   (as in databricks.yml)
+#        variable DATABRICKS_HOST           https://<workspace host>
+#        variable DATABRICKS_WAREHOUSE_ID   the SQL warehouse the portal queries in that workspace
 #        secret   DATABRICKS_CLIENT_ID      the deploying service principal's application (client) id
 #        secret   DATABRICKS_CLIENT_SECRET  an OAuth secret for that service principal
 #      To use GitHub OIDC (workload identity federation) instead of a secret, add a federation policy for the service
 #      principal in Databricks, drop DATABRICKS_CLIENT_SECRET and set DATABRICKS_AUTH_TYPE: github-oidc (see below).
+#      The deploy writes the two gitignored local files (databricks.local.yml, src/environments.local.yml) from the host
+#      and warehouse id, so no workspace is committed (decision 0010). On DoneelM/LakeBoard all four values are required.
 #   3. The service principal needs to deploy bundles and manage apps in each workspace, CAN_USE on the warehouse,
 #      and SELECT on what the dashboards read (the deploy runs every query with LIMIT 0).
 name: deploy
@@ -23,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       keep_running:
-        description: Leave the dev or test app running after deploy
+        description: Leave the test app running after deploy (dev and prod always stay running)
         type: boolean
         default: false
 
@@ -64,25 +67,37 @@ jobs:
     env:
       TARGET: ${{ github.ref_name == 'main' && 'prod' || github.ref_name == 'release' && 'test' || 'dev' }}
       APP_NAME: ${{ github.ref_name == 'main' && 'lakeboard' || github.ref_name == 'release' && 'lakeboard-test' || 'lakeboard-dev' }}
-      KEEP_RUNNING: ${{ github.ref_name == 'main' || inputs.keep_running == true }}
+      KEEP_RUNNING: ${{ github.ref_name == 'main' || github.ref_name == 'develop' || inputs.keep_running == true }}
       DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_WAREHOUSE_ID: ${{ vars.DATABRICKS_WAREHOUSE_ID }}
       # DATABRICKS_AUTH_TYPE: github-oidc   # with OIDC instead of a client secret
       # DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET are set per step, only where Databricks is called.
     steps:
-      # A missing host on the official repo's deploy branches must fail, not go green. A fork or a copy that hasn't
-      # done the setup above has no host: skip the deploy and say so in the job summary rather than fail every push.
+      # A missing value on the official repo's deploy branches must fail, not go green, and the error names the keys (never
+      # the values). The secrets are tested as booleans, so this step never holds them. A fork or a copy that hasn't done
+      # the setup above has no host: skip the deploy and say so in the job summary rather than fail every push.
       # Environment variables can't be read in a job-level `if`, hence a step.
       - name: Check this environment is set up
         id: setup
         env:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
+          HAS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID != '' }}
+          HAS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' }}
         run: |
-          if [ -n "$DATABRICKS_HOST" ]; then
+          missing=()
+          [ -n "$DATABRICKS_HOST" ] || missing+=(DATABRICKS_HOST)
+          [ -n "$DATABRICKS_WAREHOUSE_ID" ] || missing+=(DATABRICKS_WAREHOUSE_ID)
+          [ "$HAS_CLIENT_ID" = true ] || missing+=(DATABRICKS_CLIENT_ID)
+          [ "$HAS_CLIENT_SECRET" = true ] || [ "${DATABRICKS_AUTH_TYPE:-}" = github-oidc ] || missing+=(DATABRICKS_CLIENT_SECRET)
+          if [ "$REPO" = "DoneelM/LakeBoard" ] && [[ "$BRANCH" =~ ^(main|release|develop)$ ]]; then
+            if [ "${#missing[@]}" -gt 0 ]; then
+              echo "::error::Missing in the '$TARGET' GitHub environment of $REPO: ${missing[*]}. Nothing could be deployed. Variables: DATABRICKS_HOST, DATABRICKS_WAREHOUSE_ID. Secrets: DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET. See the setup notes at the top of .github/workflows/deploy.yml."
+              exit 1
+            fi
             echo "ready=true" >> "$GITHUB_OUTPUT"
-          elif [ "$REPO" = "DoneelM/LakeBoard" ] && [[ "$BRANCH" =~ ^(main|release|develop)$ ]]; then
-            echo "::error::No DATABRICKS_HOST variable in the '$TARGET' GitHub environment of $REPO, so nothing could be deployed. See the setup notes at the top of .github/workflows/deploy.yml."
-            exit 1
+          elif [ -n "$DATABRICKS_HOST" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "Nothing deployed: no DATABRICKS_HOST variable in the '$TARGET' GitHub environment. See the setup notes at the top of .github/workflows/deploy.yml." >> "$GITHUB_STEP_SUMMARY"
             echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -113,6 +128,24 @@ jobs:
           unzip -q "$tmp/$archive" databricks -d "$tmp"
           sudo install -m 0755 "$tmp/databricks" /usr/local/bin/databricks
           databricks --version
+
+      # The workspace stays out of git: write the gitignored local files the bundle and the app already read
+      # (decision 0010). databricks.local.yml is not in sync.include, so it is not uploaded; src/environments.local.yml
+      # is, and it is what lets the app match its DATABRICKS_HOST to this environment. A copy that has no warehouse id
+      # variable keeps the values committed in databricks.yml.
+      - name: Write the local workspace files
+        if: steps.setup.outputs.ready == 'true' && env.DATABRICKS_WAREHOUSE_ID != ''
+        run: |
+          python - <<'PY'
+          import os, re, yaml
+          host, target = os.environ["DATABRICKS_HOST"].strip(), os.environ["TARGET"]
+          bundle = {"targets": {target: {"workspace": {"host": host},
+                                         "variables": {"warehouse_id": os.environ["DATABRICKS_WAREHOUSE_ID"].strip()}}}}
+          app = {"environments": {target: {"host": re.sub(r"^https?://|/+$", "", host.lower())}}}
+          for path, doc in (("databricks.local.yml", bundle), ("src/environments.local.yml", app)):
+              with open(path, "w", encoding="utf-8") as f:
+                  yaml.safe_dump(doc, f)
+          PY
 
       - name: Validate bundle
         if: steps.setup.outputs.ready == 'true'
@@ -153,9 +186,9 @@ jobs:
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle run portal -t "$TARGET"
 
-      # Dev and test are stopped again to save cost; start them when you need to test. Also runs when the start
-      # step failed, so a broken deploy doesn't leave compute running.
-      - name: Stop the app (dev and test)
+      # Test is stopped again to save cost; start it when you need to test. Dev (develop) and prod stay running. Also
+      # runs when the start step failed, so a broken deploy doesn't leave compute running.
+      - name: Stop the app (test)
         if: always() && steps.setup.outputs.ready == 'true' && env.KEEP_RUNNING != 'true'
         env:
           DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
