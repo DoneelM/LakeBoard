@@ -94,10 +94,15 @@
       h('span', { class: 'kit-tile-label' }, t.label), h('strong', null, t.value), t.note ? h('span', { class: 'kit-tile-note' }, t.note) : null)));
   }
 
-  // Cells starting with = + - @ TAB CR get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
+  // Cells whose first character, or first non-whitespace character, is = + - @ TAB CR or full-width ＝＋－＠ get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
+  const formulaStart = /^[=+\-@\t\r＝＋－＠]/;
+  const plainNumber = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
   const esc = (v) => {
     let s = v === null || v === undefined ? '' : String(v);
-    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) && !/^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s)) s = "'" + s;
+    if (typeof v !== 'number') {
+      const probed = s.replace(/^\s+/, '');
+      if ((formulaStart.test(s) || formulaStart.test(probed)) && !plainNumber.test(probed)) s = "'" + s;
+    }
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const csvText = (columns, rows) => [columns.map((c) => esc(c.label || c.key)).join(','), ...rows.map((r) => columns.map((c) => esc(r[c.key])).join(','))].join('\r\n');

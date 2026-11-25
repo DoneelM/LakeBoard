@@ -21,8 +21,11 @@ const { csvText, fmt, h } = kit;
 const cell = (v) => csvText([{ key: 'a', label: 'a' }], [{ a: v }]).split('\r\n')[1];
 
 test('csvText guards formula starts', () => {
-  for (const c of ['=1+1', '+SUM(A1)', '-cmd', '@x', '\tx', '-2+3', '+1', '-1e3x', '\t=1', '+64211234567']) assert.equal(cell(c), "'" + c);
+  for (const c of ['=1+1', '+SUM(A1)', '-cmd', '@x', '\tx', '-2+3', '+1', '-1e3x', '\t=1', '+64211234567', ' =1', ' =1+1', ' -1+1', '＝1+1', '＋1', '－cmd', '＠x']) {
+    assert.equal(cell(c), ( /[",\r\n]/.test("'" + c) ? '"' + ("'" + c).replace(/"/g, '""') + '"' : "'" + c));
+  }
   assert.equal(csvText([{ key: 'a' }], [{ a: '\rx' }]), 'a\r\n"\'\rx"');
+  assert.equal(csvText([{ key: 'a' }], [{ a: '\n=1' }]), 'a\r\n"\'\n=1"');
   assert.equal(cell('=HYPERLINK("http://x","y")'), '"\'=HYPERLINK(""http://x"",""y"")"');
 });
 
@@ -31,10 +34,7 @@ test('csvText guards headers', () => {
 });
 
 test('csvText leaves numbers and plain values alone', () => {
-  for (const [v, out] of [[-5, '-5'], ['-5', '-5'], ['1.5', '1.5'], ['2e3', '2e3'], ['plain', 'plain'], [null, ''], [undefined, ''], [0, '0']]) assert.equal(cell(v), out);
-  // A leading space is not = + - @ TAB or CR, so the guard does not fire and the cell is left as entered.
-  assert.equal(cell(' =1'), ' =1');
-  assert.equal(cell(' -1+1'), ' -1+1');
+  for (const [v, out] of [[-5, '-5'], ['-5', '-5'], ['1.5', '1.5'], ['2e3', '2e3'], [' -5', ' -5'], ['plain', 'plain'], [null, ''], [undefined, ''], [0, '0']]) assert.equal(cell(v), out);
 });
 
 test('csvText quoting and row separator', () => {
