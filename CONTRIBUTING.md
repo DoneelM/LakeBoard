@@ -22,6 +22,12 @@ Thanks for helping. Bug reports, docs fixes, new sample dashboards and framework
    python scripts/check.py --static
    ```
 
+   Optional browser smoke test (stubbed data, no workspace):
+
+   ```bash
+   pip install playwright && python -m playwright install chromium && python -m pytest e2e -q
+   ```
+
 4. If you changed a sample dashboard's SQL, run it against a workspace you own
    (Databricks Free Edition works):
    `python scripts/check.py --profile <your-profile> --warehouse <warehouse-id>`.
