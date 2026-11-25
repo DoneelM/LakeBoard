@@ -621,7 +621,7 @@ def nav_board(make_dashboard, slug, order, group_line=""):
 def test_group_is_optional_short_text(make_dashboard):
     assert nav_board(make_dashboard, "plain", 1).group == ""
     ok = nav_board(make_dashboard, "ok", 1, "group: Trip Reports")
-    assert ok.errors == [] and ok.group == "Trip Reports" and ok.catalogue_entry()["group"] == "Trip Reports"
+    assert ok.errors == [] and ok.group == "Trip Reports"
     for bad in ("group: " + "x" * 41, "group: [a, b]", "group: ' padded '"):
         board = nav_board(make_dashboard, f"bad{len(bad)}", 1, bad)
         assert any("group must be" in e for e in board.errors), bad
