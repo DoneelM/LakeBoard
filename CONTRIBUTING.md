@@ -16,7 +16,7 @@ Thanks for helping. Bug reports, docs fixes, new sample dashboards and framework
 3. Run the checks. They need no Databricks workspace:
 
    ```bash
-   python -m pip install -r src/requirements.txt pytest
+   python -m pip install -r src/requirements.txt fastapi uvicorn pytest httpx
    python -m pytest -q
    PORTAL_ENV=dev python -m pytest -q
    python scripts/check.py --static
@@ -25,7 +25,9 @@ Thanks for helping. Bug reports, docs fixes, new sample dashboards and framework
    Optional browser smoke test (stubbed data, no workspace):
 
    ```bash
-   pip install playwright && python -m playwright install chromium && python -m pytest e2e -q
+   python -m pip install -r src/requirements.txt fastapi uvicorn pytest httpx playwright
+   python -m playwright install --with-deps chromium
+   python -m pytest e2e -q
    ```
 
 4. If you changed a sample dashboard's SQL, run it against a workspace you own
