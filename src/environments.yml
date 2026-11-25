@@ -1,6 +1,6 @@
 # Which environment the app is running in, and which Unity Catalog catalogs dashboards may read.
 # The environment is picked from the workspace host (or the PORTAL_ENV variable when set). A host that matches
-# none of these counts as prod.
+# none of these stops the app at start-up unless PORTAL_ENV is set.
 # Replace these placeholder hosts with your own (no https://, no trailing slash). Azure hosts look like
 # adb-<id>.<n>.azuredatabricks.net; AWS (<name>.cloud.databricks.com) and GCP (<id>.<n>.gcp.databricks.com)
 # hosts work the same way. If every environment shares one workspace, set PORTAL_ENV in each app instead.
