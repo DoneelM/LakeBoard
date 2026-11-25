@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"   # the Python version Databricks Apps uses
@@ -64,9 +66,8 @@ jobs:
       APP_NAME: ${{ github.ref_name == 'main' && 'lakeboard' || github.ref_name == 'release' && 'lakeboard-test' || 'lakeboard-dev' }}
       KEEP_RUNNING: ${{ github.ref_name == 'main' || inputs.keep_running == true }}
       DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
       # DATABRICKS_AUTH_TYPE: github-oidc   # with OIDC instead of a client secret
+      # DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET are set per step, only where Databricks is called.
     steps:
       # A missing host on the official repo's deploy branches must fail, not go green. A fork or a copy that hasn't
       # done the setup above has no host: skip the deploy and say so in the job summary rather than fail every push.
@@ -88,6 +89,8 @@ jobs:
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: steps.setup.outputs.ready == 'true'
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         if: steps.setup.outputs.ready == 'true'
         with:
@@ -113,10 +116,16 @@ jobs:
 
       - name: Validate bundle
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle validate -t "$TARGET"
 
       - name: Run every dataset (LIMIT 0) against the ${{ env.TARGET }} catalogs
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
           WAREHOUSE=$(databricks bundle validate -t "$TARGET" -o json | python -c "import json,sys; print(json.load(sys.stdin)['variables']['warehouse_id']['value'])")
           python scripts/check.py --env "$TARGET" --warehouse "$WAREHOUSE"
@@ -125,20 +134,32 @@ jobs:
       - name: Build the source map for the freshness label
         continue-on-error: true
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: python scripts/build_sources_map.py --env "$TARGET"
 
       - name: Deploy bundle
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle deploy -t "$TARGET"
 
       - name: Start the app with the new code
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle run portal -t "$TARGET"
 
       # Dev and test are stopped again to save cost; start them when you need to test. Also runs when the start
       # step failed, so a broken deploy doesn't leave compute running.
       - name: Stop the app (dev and test)
         if: always() && steps.setup.outputs.ready == 'true' && env.KEEP_RUNNING != 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
           for attempt in 1 2 3 4 5; do
             if databricks -t "$TARGET" apps stop "$APP_NAME"; then exit 0; fi
