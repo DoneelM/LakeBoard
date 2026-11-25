@@ -1,7 +1,7 @@
 # 0019. Fail closed when the workspace host is unmatched or, in a deployed app, empty
 
-- **Status:** In progress
-- **Links:** [pull request #26](https://github.com/DoneelM/LakeBoard/pull/26) (unmatched host; pending), [pull request #31](https://github.com/DoneelM/LakeBoard/pull/31) (empty host when deployed; pending)
+- **Status:** Accepted
+- **Links:** [pull request #26](https://github.com/DoneelM/LakeBoard/pull/26) (unmatched host), [pull request #31](https://github.com/DoneelM/LakeBoard/pull/31) (empty host when deployed)
 
 ## Context
 `current_env()` in `src/portal/settings.py` picks the environment that drives catalog swaps. It uses `PORTAL_ENV` if

@@ -64,4 +64,4 @@ this repository.
 | [0016](0016-selective-refresh.md) | Selective refresh and query profiling | Accepted |
 | [0017](0017-navigation-sub-menus.md) | Navigation sub-menus (`group:`) | Accepted |
 | [0018](0018-publishing-guards.md) | Publishing guards: reviewed pages and shared SQL, groups for app data, credential-free PR checks | Accepted |
-| [0019](0019-fail-closed-host-resolution.md) | Fail closed when the workspace host is unmatched or, in a deployed app, empty | In progress |
+| [0019](0019-fail-closed-host-resolution.md) | Fail closed when the workspace host is unmatched or, in a deployed app, empty | Accepted |
