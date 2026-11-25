@@ -10,7 +10,7 @@ Open LakeBoard work: its branch, pull request, task and owner. Each PR's state (
 | `fix/deploy-workflow` | [#30](https://github.com/DoneelM/LakeBoard/pull/30) | Fail when `DATABRICKS_HOST` is missing on this repo; `id-token: write` on the deploy job only; pin Actions | Hulk |
 | `fix/dev-target-from-env` | [#32](https://github.com/DoneelM/LakeBoard/pull/32) | CI deploys develop from GitHub environment vars; workspace stays out of git; leave lakeboard-dev running | Hulk |
 | `docs/adr-fail-closed-host` | [#33](https://github.com/DoneelM/LakeBoard/pull/33) | Decision 0019: fail closed when the workspace host is unmatched or, in a deployed app, empty | Hulk |
-| `fix/env-fail-closed` | [#34](https://github.com/DoneelM/LakeBoard/pull/34) | Fail start-up when a deployed app has an empty DATABRICKS_HOST (re-land #31 on develop) | Hulk |
+| `fix/identity-cache-lock` | [#35](https://github.com/DoneelM/LakeBoard/pull/35) | One lock around every identity-cache read and write; Databricks lookup outside it | Black Widow |
 | TBD | — | Host resolution follow-ups (Wolverine #31 L1/I1-I3) | Hulk |
 
 ## Standing permissions
