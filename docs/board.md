@@ -11,7 +11,10 @@ Open LakeBoard work: its branch, pull request, task and owner. Each PR's state (
 | `fix/csv-injection` | [#27](https://github.com/DoneelM/LakeBoard/pull/27) | CSV export: neutralise formula cells; Node tests for csv, fmt and h() | Black Widow |
 | `fix/self-host-fonts-csp` | [#28](https://github.com/DoneelM/LakeBoard/pull/28) | Self-host Inter, drop Google font hosts from the CSP, add `frame-ancestors 'self'` | Black Widow |
 | `test/playwright-smoke` | [#29](https://github.com/DoneelM/LakeBoard/pull/29) | Playwright smoke test of the local app with stubbed data | Black Widow |
-| `fix/deploy-workflow` | not opened | Fail when `DATABRICKS_HOST` is missing on this repo; `id-token: write` on the deploy job only; pin Actions | Hulk |
+| `fix/deploy-workflow` | [#30](https://github.com/DoneelM/LakeBoard/pull/30) | Fail when `DATABRICKS_HOST` is missing on this repo; `id-token: write` on the deploy job only; pin Actions | Hulk |
+| `fix/dev-target-from-env` | [#32](https://github.com/DoneelM/LakeBoard/pull/32) | CI deploys develop from GitHub environment vars; workspace stays out of git; leave lakeboard-dev running | Hulk |
+| `docs/adr-fail-closed-host` | not opened | Decision 0019: fail closed when the workspace host is unmatched or, in a deployed app, empty | Hulk |
+| TBD | — | Host resolution follow-ups (Wolverine #31 L1/I1-I3) | Hulk |
 
 ## Standing permissions
 
