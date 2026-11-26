@@ -15,8 +15,8 @@ can be one workspace (a Databricks Free Edition workspace is enough to try it); 
 Two example pipelines do all three, so pick the one for your git host:
 
 - **GitHub Actions:** `.github/workflows/deploy.yml`. It signs in with a service principal's OAuth secret
-  (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) or GitHub OIDC, and reads `DATABRICKS_HOST` and
-  `DATABRICKS_WAREHOUSE_ID` from the GitHub environment (`dev`, `test` or `prod`). It writes the gitignored
+  (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) or GitHub OIDC, and reads the `DATABRICKS_HOST` secret and
+  the `DATABRICKS_WAREHOUSE_ID` variable from the GitHub environment (`dev`, `test` or `prod`). It writes the gitignored
   `databricks.local.yml` and `src/environments.local.yml` from them, so no workspace is committed.
 - **Azure DevOps:** `azure-pipelines.yml` with `pipelines/deploy-steps.yml`. It signs in through the
   `databricks-service-connection` service connection and reads `DATABRICKS_HOST` from the `lakeboard-dev-vars`,
@@ -73,8 +73,10 @@ Removing the line is a normal change that goes through the same three PRs.
   and the hosts under `environments:` in `src/environments.yml`.
 - A service principal for deploys, added to each workspace. It needs permission to create apps, `CAN USE` on the
   SQL warehouse, and `SELECT` on the views the dashboards read (for the `LIMIT 0` check).
-- **GitHub:** create the environments `dev`, `test` and `prod` with the `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variables and the client
-  id and secret (or an OIDC federation policy). Add required reviewers on `prod` if a person should approve each
+- **GitHub:** create the environments `dev`, `test` and `prod` with the `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID` and
+  `DATABRICKS_CLIENT_SECRET` secrets (or an OIDC federation policy instead of the client secret) and the
+  `DATABRICKS_WAREHOUSE_ID` variable. Keep the host a secret: Actions logs of a public repository are public, and
+  GitHub masks secrets but not variables. Add required reviewers on `prod` if a person should approve each
   prod deploy.
 - **Azure DevOps:** create the pipeline from `azure-pipelines.yml` and authorise it to use the service connection
   and the three variable groups. Restrict them to the protected branches (pipeline permissions and branch control

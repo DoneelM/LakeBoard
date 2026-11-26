@@ -27,12 +27,20 @@ Without the files, nothing changes.
 
 ## Limitations
 - The files are gitignored, so a checkout in CI doesn't have them. The GitHub Actions deploy writes both from the
-  GitHub environment's `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variables just before `bundle validate`
+  GitHub environment's `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` just before `bundle validate`
   (`.github/workflows/deploy.yml`), so that workspace stays out of git too. The Azure DevOps pipeline still uses
   committed values or its own variables (`DATABRICKS_HOST`).
 - `bundle validate` warns that `src/environments.local.yml` matches no files when it isn't there (as it does for
   `src/sources_map.json`).
 - Only hosts can be overridden in `environments.local.yml`, not catalogs, sections or brand.
+
+## Update 2026-11-26: the host is a GitHub secret
+Actions logs of a public repository are public, and GitHub masks secrets but not variables: a failed deploy printed
+the workspace host in its log. The deploy now reads `DATABRICKS_HOST` from the environment's secrets, falling back to
+a variable of the same name so environments not yet moved keep deploying. The setup step also masks the stripped
+host and its bare form (no scheme or slash, lower case, as written to `src/environments.local.yml`), because GitHub
+masks a secret only as stored. Not covered: IDs that Databricks puts in its own error messages, such as the
+workspace id and a principal's user id, which no mask set in advance can match. Only a private repository hides those.
 
 ## Alternatives considered
 - Uncommitted edits to the committed files (`git update-index --skip-worktree`): hidden state, and easy to commit.

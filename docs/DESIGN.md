@@ -280,9 +280,10 @@ Two example pipelines do the same thing; use whichever matches your git host.
   app that already exists, decision 0020), then `databricks bundle run portal`. Test is
   stopped afterwards (GitHub Actions; Azure DevOps also stops dev). Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a
-  `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variable and a service principal's OAuth secret
-  (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. The deploy writes the
-  gitignored `databricks.local.yml` and `src/environments.local.yml` from the two variables (decision 0010). A `concurrency` group per environment. On `DoneelM/LakeBoard`,
+  `DATABRICKS_HOST` secret (masked in the logs, with its bare host form), a `DATABRICKS_WAREHOUSE_ID` variable and a
+  service principal's OAuth secret (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the
+  secret. The deploy writes the gitignored `databricks.local.yml` and `src/environments.local.yml` from the host and
+  warehouse id (decision 0010). A `concurrency` group per environment. On `DoneelM/LakeBoard`,
   an environment missing any of the four values fails the job on `main`/`release`/`develop`, naming the keys; forks and unconfigured copies
   skip the deploy and write a "nothing deployed" job summary, so a fresh fork's pushes don't fail.
 - **Azure DevOps** (`azure-pipelines.yml`): the `databricks-service-connection` service connection (a placeholder);

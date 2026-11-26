@@ -6,7 +6,8 @@
 #   1. Create three GitHub environments: dev, test, prod (Settings > Environments). Add required reviewers on prod
 #      if you want a person to approve each prod deploy.
 #   2. In each environment, add:
-#        variable DATABRICKS_HOST           https://<workspace host>
+#        secret   DATABRICKS_HOST           https://<workspace host> (a secret, so GitHub masks it in the public logs;
+#                                           a variable of the same name still works)
 #        variable DATABRICKS_WAREHOUSE_ID   the SQL warehouse the portal queries in that workspace
 #        secret   DATABRICKS_CLIENT_ID      the deploying service principal's application (client) id
 #        secret   DATABRICKS_CLIENT_SECRET  an OAuth secret for that service principal
@@ -92,7 +93,7 @@ jobs:
         env:
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
-          DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST || vars.DATABRICKS_HOST }}
           DATABRICKS_WAREHOUSE_ID: ${{ vars.DATABRICKS_WAREHOUSE_ID }}
           HAS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID != '' }}
           HAS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET != '' }}
@@ -101,6 +102,13 @@ jobs:
           # later steps (including the write step's condition) get the stripped values.
           DATABRICKS_HOST="$(printf '%s' "$DATABRICKS_HOST" | tr -d '[:space:]')"
           DATABRICKS_WAREHOUSE_ID="$(printf '%s' "$DATABRICKS_WAREHOUSE_ID" | tr -d '[:space:]')"
+          # GitHub masks a secret only as stored. Mask the stripped host and the bare host (no scheme, no slash, lower
+          # case, as written to src/environments.local.yml) too, so neither shows in the logs of a public repo.
+          if [ -n "$DATABRICKS_HOST" ]; then
+            echo "::add-mask::$DATABRICKS_HOST"
+            bare="$(printf '%s' "$DATABRICKS_HOST" | tr '[:upper:]' '[:lower:]' | sed -E 's#^https?://##; s#/+$##')"
+            [ -z "$bare" ] || echo "::add-mask::$bare"
+          fi
           echo "DATABRICKS_HOST=$DATABRICKS_HOST" >> "$GITHUB_ENV"
           echo "DATABRICKS_WAREHOUSE_ID=$DATABRICKS_WAREHOUSE_ID" >> "$GITHUB_ENV"
           missing=()
@@ -110,14 +118,14 @@ jobs:
           [ "$HAS_CLIENT_SECRET" = true ] || [ "${DATABRICKS_AUTH_TYPE:-}" = github-oidc ] || missing+=(DATABRICKS_CLIENT_SECRET)
           if [ "$REPO" = "DoneelM/LakeBoard" ] && [[ "$BRANCH" =~ ^(main|release|develop)$ ]]; then
             if [ "${#missing[@]}" -gt 0 ]; then
-              echo "::error::Missing in the '$TARGET' GitHub environment of $REPO: ${missing[*]}. Nothing could be deployed. Variables: DATABRICKS_HOST, DATABRICKS_WAREHOUSE_ID. Secrets: DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET. See the setup notes at the top of .github/workflows/deploy.yml."
+              echo "::error::Missing in the '$TARGET' GitHub environment of $REPO: ${missing[*]}. Nothing could be deployed. Secrets: DATABRICKS_HOST, DATABRICKS_CLIENT_ID, DATABRICKS_CLIENT_SECRET. Variable: DATABRICKS_WAREHOUSE_ID. See the setup notes at the top of .github/workflows/deploy.yml."
               exit 1
             fi
             echo "ready=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$DATABRICKS_HOST" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Nothing deployed: no DATABRICKS_HOST variable in the '$TARGET' GitHub environment. See the setup notes at the top of .github/workflows/deploy.yml." >> "$GITHUB_STEP_SUMMARY"
+            echo "Nothing deployed: no DATABRICKS_HOST secret or variable in the '$TARGET' GitHub environment. See the setup notes at the top of .github/workflows/deploy.yml." >> "$GITHUB_STEP_SUMMARY"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

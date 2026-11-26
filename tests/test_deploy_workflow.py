@@ -31,6 +31,11 @@ def run(name: str, tmp_path: Path, **env):
 CHECK = "Check this environment is set up"
 
 
+def shown(r) -> str:
+    """What the log shows: the runner consumes ::add-mask:: commands and never prints them."""
+    return "".join(line for line in (r.stdout + r.stderr).splitlines(keepends=True) if not line.startswith("::add-mask::"))
+
+
 def test_official_repo_with_all_four_values_is_ready(tmp_path):
     r, out = run(CHECK, tmp_path)
     assert r.returncode == 0 and "ready=true" in out
@@ -48,7 +53,7 @@ def test_official_repo_fails_naming_each_missing_key_and_no_values(tmp_path, env
     error = next(line for line in r.stdout.splitlines() if line.startswith("::error::"))
     assert r.returncode == 1 and "ready=" not in out
     assert error.split(". Nothing")[0].split(": ")[-1].split() == named
-    assert "dbc-0123abcd" not in r.stdout + r.stderr and "abc123def456" not in r.stdout + r.stderr
+    assert "dbc-0123abcd" not in shown(r) and "abc123def456" not in shown(r)
 
 
 def test_the_host_reaches_later_steps_stripped_and_blank_counts_as_missing(tmp_path):
@@ -64,6 +69,23 @@ def test_the_warehouse_id_reaches_later_steps_stripped_and_blank_counts_as_missi
     r, _ = run(CHECK, tmp_path, DATABRICKS_WAREHOUSE_ID="   ")
     assert r.returncode == 1 and "DATABRICKS_WAREHOUSE_ID" in r.stdout
     assert "abc123def456" not in r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("raw", [HOST, f"  {HOST}\n", "HTTPS://DBC-0123abcd-4567.cloud.databricks.com//"])
+def test_the_host_is_masked_as_given_and_as_a_bare_host(tmp_path, raw):
+    r, _ = run(CHECK, tmp_path, DATABRICKS_HOST=raw)
+    masks = [line.removeprefix("::add-mask::") for line in r.stdout.splitlines() if line.startswith("::add-mask::")]
+    assert r.returncode == 0 and raw.strip() in masks and "dbc-0123abcd-4567.cloud.databricks.com" in masks
+
+
+def test_no_mask_for_a_missing_host(tmp_path):
+    r, _ = run(CHECK, tmp_path, DATABRICKS_HOST="")
+    assert "::add-mask::" not in r.stdout
+
+
+def test_the_host_is_read_from_the_secret_first_then_the_variable():
+    check = next(s for s in STEPS if s.get("name") == CHECK)
+    assert check["env"]["DATABRICKS_HOST"] == "${{ secrets.DATABRICKS_HOST || vars.DATABRICKS_HOST }}"
 
 
 def test_oidc_needs_no_client_secret(tmp_path):
