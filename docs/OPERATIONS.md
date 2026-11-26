@@ -78,7 +78,8 @@ conversation history in the space, where the space's managers can review them wi
 
 ## Starting and stopping (cost)
 
-The app bills while it runs. The example pipelines stop dev and test after every deployment.
+The app bills while it runs. The GitHub Actions deploy stops test after every deployment and leaves dev (`develop`)
+and prod running; the Azure DevOps pipeline stops dev and test.
 
 ```bash
 databricks -p <your-profile> apps start lakeboard-dev
@@ -92,6 +93,32 @@ Prod keeps running. To save cost out of hours, stop it in the evening with a sch
 or script task running `databricks apps stop lakeboard`, or the SDK's `w.apps.stop("lakeboard")`). Nothing has
 to start it again: the first person to open the portal does. Stopping empties the cache (see
 [How data refreshes](#how-data-refreshes)). See decision 0005 for the reasoning.
+
+### First CI deploy to an app that already exists
+
+App names are unique in a workspace, and each identity that deploys keeps its own bundle state under its own
+`root_path`. So when `lakeboard-dev`, `lakeboard-test` or `lakeboard` was created by hand or deployed by a person, the
+CI service principal's first `bundle deploy` fails with "An app with the same name already exists".
+
+The pipelines handle this (`scripts/deploy_bundle.sh`, decision 0020): on that exact error they bind the existing app
+to the bundle and deploy again, so the deploy updates it. You'll see the first error in the log, then a line saying
+the app is being bound. The principal needs `CAN MANAGE` on the app; if it doesn't have it, the step fails and says
+so. Grant it on the app (Compute > Apps > the app > Permissions) and run the pipeline again.
+
+Before the first such deploy:
+- **Settings the bundle doesn't declare** (for example `budget_policy_id`): copy them into the bundle, or the deploy
+  can fail or drop them.
+- **Grants made by hand on the app**: the bundle's `permissions` take over, so add any you want to keep to
+  `resources/portal.app.yml` or the target in `databricks.yml`.
+- **Stop deploying that target from a laptop.** Two bundle states managing one app overwrite each other, and a
+  `bundle destroy` from either deletes it. For a personal app, set your own `app_name` in `databricks.local.yml`.
+
+To bind by hand instead (as the CI service principal, with `databricks.local.yml` and `src/environments.local.yml` in
+place so the target points at the same workspace):
+
+```bash
+databricks bundle deployment bind portal lakeboard-dev --target dev --auto-approve
+```
 
 ## How data refreshes
 
@@ -321,7 +348,8 @@ and [Databricks Apps monitoring](https://docs.databricks.com/aws/en/dev-tools/da
 | "Couldn't load this data: … does not have USE CATALOG / SELECT" | The viewer lacks Unity Catalog access to a view. Grant it to their group |
 | The sample dashboards say `samples` is not found | The workspace has no `samples` catalog, or an admin has hidden it. Use a workspace that has it (Databricks Free Edition does), or switch the samples off |
 | A dashboard is missing from the navigation | The person isn't in its `groups`, it is switched off for this environment, or it failed validation (`/api/health`) |
-| Every page reads prod catalogs in dev | The workspace host doesn't match `environments:` in `src/environments.yml` (an unknown host counts as prod). Fix the host or set `PORTAL_ENV` |
+| App fails to start: `DATABRICKS_HOST=... matches no host` | The workspace host doesn't match `environments:` in `src/environments.yml`. Fix the host or set `PORTAL_ENV` |
+| App fails to start: `DATABRICKS_HOST is empty in a deployed app` | The deployed app has no `DATABRICKS_HOST`. Set it, or set `PORTAL_ENV`. Local runs with no host still default to prod |
 | Map tiles don't appear | The network blocks `tile.openstreetmap.org`. The points still plot |
 | Deployment fails on "Run every dataset" | A view the SQL uses doesn't exist in that environment's catalog yet, or the deploying service principal can't read it |
 | First load of a page is slow | The cache was empty (after a deployment, restart or a scheduled stop), the warehouse was busy, or the views are slow. See [How data refreshes](#how-data-refreshes). Use `cache: shared` with `warm:` if everyone sees the same data, raise `cache_ttl`, or build a pre-aggregated table |

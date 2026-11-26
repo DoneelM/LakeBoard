@@ -65,9 +65,9 @@ def day_events(tok: str, day: dt.date):
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:300]
             if e.code == 400:  # the day is older than the log goes back
-                raise LookupError(detail)
+                raise LookupError(detail) from e
             hint = " This login is not allowed to read the admin activity log (see the sign-in notes at the top of this script)." if e.code in (401, 403) else ""
-            raise SystemExit(f"Power BI returned {e.code} for {day}.{hint}\n{detail}")
+            raise SystemExit(f"Power BI returned {e.code} for {day}.{hint}\n{detail}") from e
         yield from page.get("activityEventEntities", [])
         url = None if page.get("lastResultSet") else page.get("continuationUri")
 

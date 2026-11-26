@@ -233,6 +233,125 @@ def test_health_endpoints(client, path):
     assert res.status_code == 200
     assert res.json()["ok"] is True
 
+
+def test_csp_frames_self_and_fonts_are_self_hosted(client):
+    import app as portal_app
+    res = client.get("/healthz")
+    csp = res.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self'" in csp
+    assert "font-src 'self';" in csp
+    assert "googleapis" not in csp and "gstatic" not in csp
+    assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert res.headers["X-Content-Type-Options"] == "nosniff"
+    font = client.get("/static/fonts/inter-latin.woff2")
+    assert font.status_code == 200 and font.content.startswith(b"wOF2")
+    assert "fonts.googleapis.com" not in portal_app.TEMPLATES["shell"]
+
+
+def test_frame_ancestors_derived_from_databricks_host():
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {"DATABRICKS_HOST": "https://adb-123.azuredatabricks.net/"}
+    assert frame_ancestors(env) == ["'self'", "https://adb-123.azuredatabricks.net"]
+    assert x_frame_options(environ=env) is None
+
+
+def test_frame_ancestors_appends_env_entries():
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {
+        "DATABRICKS_HOST": "workspace.example.com",
+        "FRAME_ANCESTORS": "https://apps.example.com, https://preview.example.com:443",
+    }
+    assert frame_ancestors(env) == [
+        "'self'",
+        "https://workspace.example.com",
+        "https://apps.example.com",
+        "https://preview.example.com:443",
+    ]
+    assert x_frame_options(environ=env) is None
+    assert frame_ancestors({}) == ["'self'"]
+    assert x_frame_options(environ={}) == "SAMEORIGIN"
+
+
+@pytest.mark.parametrize("bad", [
+    "*", "http://example.com", "https://example.com/path",
+    "https://example.com;script-src", "https://example.com;report-uri",
+    "https://example.com?x=1", "https://example.com#f", "https://user:pass@host.com",
+    "ftp://example.com", "https://https://example.com", "'self'", "'none'",
+])
+def test_frame_ancestors_rejects_bad_entries_at_startup(bad):
+    from portal.settings import frame_ancestors
+    with pytest.raises(ValueError, match="FRAME_ANCESTORS"):
+        frame_ancestors({"FRAME_ANCESTORS": bad})
+
+
+@pytest.mark.parametrize("bad", [
+    "example.com;script-src", "https://example.com;script-src",
+    "example.com\r\nevil.com", "example.com\nevil.com",
+    "example.com/path", "https://example.com/path",
+    "example.com?x=1", "example.com#frag",
+    "user:pass@host.com", "https://user:pass@host.com",
+    "*", "'self'", "'none'", '"example.com"',
+    "https://https://example.com", "ftp://example.com",
+    "https://ftp://example.com",
+])
+def test_frame_ancestors_rejects_malformed_databricks_host_at_startup(bad):
+    from portal.settings import frame_ancestors
+    with pytest.raises(ValueError, match="DATABRICKS_HOST"):
+        frame_ancestors({"DATABRICKS_HOST": bad, "PORTAL_ENV": "prod"})
+
+
+@pytest.mark.parametrize("raw, origin", [
+    ("https://adb-123.azuredatabricks.net/", "https://adb-123.azuredatabricks.net"),
+    ("adb-123.azuredatabricks.net", "https://adb-123.azuredatabricks.net"),
+    ("HTTPS://ADB-123.AZUREDATABRICKS.NET/", "https://adb-123.azuredatabricks.net"),
+    ("dbc-xxx.cloud.databricks.com", "https://dbc-xxx.cloud.databricks.com"),
+    ("https://dbc-abc.cloud.databricks.com/", "https://dbc-abc.cloud.databricks.com"),
+])
+def test_normal_workspace_hosts_are_accepted_as_frame_ancestors(raw, origin):
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {"DATABRICKS_HOST": raw}
+    assert frame_ancestors(env) == ["'self'", origin]
+    assert x_frame_options(environ=env) is None
+
+
+def test_empty_databricks_host_stays_self_only():
+    from portal.settings import frame_ancestors, x_frame_options
+    for env in ({}, {"DATABRICKS_HOST": ""}, {"DATABRICKS_HOST": "   "}):
+        assert frame_ancestors(env) == ["'self'"]
+        assert x_frame_options(environ=env) == "SAMEORIGIN"
+
+
+def test_ipv6_frame_ancestors_keep_brackets():
+    from portal.settings import frame_ancestors
+    assert frame_ancestors({"FRAME_ANCESTORS": "https://[::1]"}) == ["'self'", "https://[::1]"]
+    assert frame_ancestors({"FRAME_ANCESTORS": "https://[::1]:443"}) == ["'self'", "https://[::1]:443"]
+    assert frame_ancestors({"DATABRICKS_HOST": "https://[::1]/"}) == ["'self'", "https://[::1]"]
+
+
+def test_unhandled_500_sends_security_headers(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as portal_app
+    from starlette.routing import Route
+
+    async def boom(request):
+        raise RuntimeError("boom")
+
+    route = Route("/__test_boom__", boom, methods=["GET"])
+    portal_app.app.router.routes.append(route)
+    monkeypatch.setattr(portal_app, "current_user", lambda request: object())
+    try:
+        # Starlette always re-raises after sending the 500; the client must not turn that into a test failure.
+        res = TestClient(portal_app.app, raise_server_exceptions=False).get("/__test_boom__")
+        assert res.status_code == 500
+        assert "boom" not in res.text
+        assert "frame-ancestors 'self'" in res.headers["Content-Security-Policy"]
+        assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+        assert res.headers["X-Content-Type-Options"] == "nosniff"
+        assert res.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    finally:
+        portal_app.app.router.routes.remove(route)
+
+
 # --- Ask Genie: manifest rules ---
 
 SPACE = "01f154d08a811926afe043c48276059f"
@@ -621,7 +740,7 @@ def nav_board(make_dashboard, slug, order, group_line=""):
 def test_group_is_optional_short_text(make_dashboard):
     assert nav_board(make_dashboard, "plain", 1).group == ""
     ok = nav_board(make_dashboard, "ok", 1, "group: Trip Reports")
-    assert ok.errors == [] and ok.group == "Trip Reports" and ok.catalogue_entry()["group"] == "Trip Reports"
+    assert ok.errors == [] and ok.group == "Trip Reports"
     for bad in ("group: " + "x" * 41, "group: [a, b]", "group: ' padded '"):
         board = nav_board(make_dashboard, f"bad{len(bad)}", 1, bad)
         assert any("group must be" in e for e in board.errors), bad

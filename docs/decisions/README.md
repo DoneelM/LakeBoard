@@ -52,15 +52,17 @@ this repository.
 | [0002](0002-queries-run-as-the-viewer.md) | Queries run as the viewer; `auth: app` is the exception | Accepted |
 | [0003](0003-caching-and-warming.md) | Caching and warming | Accepted |
 | [0004](0004-promotion-same-branch-to-each-environment.md) | Promotion: the same branch to each environment | Accepted |
-| [0005](0005-stop-apps-after-deploy-and-at-6pm.md) | Dev and test apps stopped after every deploy; prod stopped in the evening | Accepted |
+| [0005](0005-stop-apps-after-deploy-and-at-6pm.md) | Test app stopped after every deploy; GitHub Actions leaves dev running; prod stopped in the evening | Accepted |
 | [0006](0006-ask-genie-as-the-viewer.md) | Ask Genie: as the viewer, one Genie space per dashboard | Accepted |
 | [0009](0009-data-freshness-label.md) | Data freshness label | Accepted |
 | [0010](0010-local-overrides-for-workspace-details.md) | Workspace details in gitignored local files | Accepted |
 | [0011](0011-claude-dashboard-artifacts.md) | Claude Dashboard artifacts run as-is | Accepted |
-| [0012](0011-agent-independent-dashboard-authoring.md) | Agent-independent dashboard authoring | In progress |
+| [0012](0012-agent-independent-dashboard-authoring.md) | Agent-independent dashboard authoring | In progress |
 | [0013](0013-platform-reliability.md) | Shared access, warm policy and honest freshness | Accepted |
 | [0014](0014-travel-operations-showcase.md) | Travel Operations personal showcase | Accepted |
 | [0015](0015-review-deployed-apps.md) | Review deployed apps | Accepted |
 | [0016](0016-selective-refresh.md) | Selective refresh and query profiling | Accepted |
 | [0017](0017-navigation-sub-menus.md) | Navigation sub-menus (`group:`) | Accepted |
 | [0018](0018-publishing-guards.md) | Publishing guards: reviewed pages and shared SQL, groups for app data, credential-free PR checks | Accepted |
+| [0019](0019-fail-closed-host-resolution.md) | Fail closed when the workspace host is unmatched or, in a deployed app, empty | Accepted |
+| [0020](0020-deploy-updates-an-existing-app.md) | Deploy updates an app that already exists | Accepted |

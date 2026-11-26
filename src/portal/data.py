@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 import time
+from contextlib import contextmanager
 from datetime import date
 from uuid import uuid4
 
@@ -36,6 +37,21 @@ class QueryError(Exception):
 def _lock(key: str) -> threading.Lock:
     with _locks_guard:
         return _locks.setdefault(key, threading.Lock())
+
+
+@contextmanager
+def _held(key: str):
+    while True:
+        lock = _lock(key)
+        lock.acquire()
+        with _locks_guard:
+            if _locks.get(key) is lock:
+                break
+        lock.release()  # prune() dropped it before we acquired; retry with the registered lock
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def bind(dashboard: Dashboard, ds: Dataset, raw: dict) -> list[StatementParameterListItem]:
@@ -100,7 +116,7 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
     hit = _cache.get(key)
     if hit and not refresh and hit[0] > time.time():
         return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
-    with _lock(key):  # one query per key at a time; others wait and reuse it
+    with _held(key):  # one query per key at a time; others wait and reuse it
         hit = _cache.get(key)
         if hit and not refresh and hit[0] > time.time():
             return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
@@ -117,8 +133,12 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
 
 def prune() -> None:
     now = time.time()
-    for k in [k for k, v in _cache.items() if v[0] < now - 3600]:
-        _cache.pop(k, None)
+    for k, v in list(_cache.items()):  # a snapshot: worker threads insert while this runs
+        if v[0] < now - 3600:
+            _cache.pop(k, None)
+    with _locks_guard:  # never a lock whose key is cached or mid-fetch, or fetch() could run one key twice
+        for k in [k for k, lock in _locks.items() if k not in _cache and not lock.locked()]:
+            del _locks[k]
 
 
 def data_through(ds: Dataset, payload: dict) -> str | None:
@@ -156,7 +176,10 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
     scheduled = WARM_ENABLED and env in WARM.get("environments", [])
     started, last_slot = False, _warm_slot()
     while True:
-        prune()
+        try:
+            prune()
+        except Exception:  # a failed prune must not end warming
+            log.exception("prune failed")
         for d in dashboards.values():
             for ds in d.datasets.values():
                 key = f"{d.slug}/{ds.id}"

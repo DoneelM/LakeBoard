@@ -8,17 +8,19 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 from databricks.sdk import WorkspaceClient
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 
 from portal import access, data, genie, snapshots, sources, usage, xlsx
 from portal.auth import LOCAL_PROFILE, User, can_open, can_open_dashboard, current_user
 from portal.registry import ASSET_TYPES, Dashboard, load_all
 from portal.settings import (BRAND, DRAFTS_GROUPS, IMAGE_HOSTS, LIBS, LOCALE, SECTIONS, TIMEZONE, WARM, current_env,
-                             is_local_run, resolve_default)
+                             frame_ancestors, is_local_run, resolve_default, x_frame_options)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("portal")
@@ -28,17 +30,21 @@ ENV = current_env()
 sources.load_map(ENV)  # deploy-time view map for the freshness label, if built for this environment
 VERSION = str(int(time.time()))  # added to static URLs so browsers pick up new files after a deploy
 
-# Pages run with the viewer's data access, so the browser may only talk to this app (plus fonts and map tiles).
+# Pages run with the viewer's data access, so the browser may only talk to this app (plus map tiles).
+# A bad FRAME_ANCESTORS value raises here so the app does not start with an open or broken policy.
+_FRAME_ANCESTORS = frame_ancestors()
+_X_FRAME_OPTIONS = x_frame_options(_FRAME_ANCESTORS)
 CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data: blob: " + " ".join(IMAGE_HOSTS),
     "connect-src 'self'",
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
+    "frame-ancestors " + " ".join(_FRAME_ANCESTORS),
 ])
 
 
@@ -88,14 +94,33 @@ app = FastAPI(title=str(BRAND["name"]), lifespan=lifespan, docs_url=None, redoc_
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Content-Security-Policy"] = CSP
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    # Send only our origin (never the path) to other sites. OpenStreetMap blocks tile requests that carry no referrer.
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    return response
+class SecurityHeadersMiddleware:
+    """Stamps the policy on every HTTP response, including unhandled 500s (Starlette's error handler sits outside @middleware)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["Content-Security-Policy"] = CSP
+                headers["X-Content-Type-Options"] = "nosniff"
+                # Send only our origin (never the path) to other sites. OpenStreetMap blocks tile requests that carry no referrer.
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+                if _X_FRAME_OPTIONS:
+                    headers["X-Frame-Options"] = _X_FRAME_OPTIONS
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+_build = app.build_middleware_stack
+app.build_middleware_stack = lambda: SecurityHeadersMiddleware(_build())
 
 
 def board_for(request: Request, slug: str) -> tuple[Dashboard, User]:
@@ -276,7 +301,7 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
 
 
 @app.get("/api/d/{slug}/sources")
-async def dataset_sources(request: Request, slug: str, check: list[str] | None = Query(None)):
+async def dataset_sources(request: Request, slug: str, check: Annotated[list[str] | None, Query()] = None):
     """Read source metadata as the app. An explicit refresh check bypasses the display metadata cache."""
     d, user = board_for(request, slug)
     allowed = {k: v for k, v in d.datasets.items() if can_open(user, v.groups) and not v.todo}
@@ -314,7 +339,7 @@ async def genie_body(request: Request) -> dict:
     try:
         body = json.loads(raw or b"{}")
     except ValueError:
-        raise HTTPException(400, "The request must be JSON")
+        raise HTTPException(400, "The request must be JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "The request must be a JSON object")
     return body
@@ -388,7 +413,7 @@ async def export_xlsx(request: Request):
             raise ValueError("The request must be a JSON object")
         content = await asyncio.to_thread(xlsx.build, body.get("sheets"))
     except (ValueError, TypeError, AttributeError, KeyError, RecursionError) as e:
-        raise HTTPException(400, str(e)[:200] or "The Excel data was not valid")
+        raise HTTPException(400, str(e)[:200] or "The Excel data was not valid") from e
     name = xlsx.safe_filename(body.get("name"))
     return Response(content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "private, no-store"})

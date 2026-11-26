@@ -104,6 +104,10 @@ targets:
 and `src/environments.local.yml` sets the host the app uses to know it is dev:
 `environments: {dev: {host: <your-workspace-host>}}` (no https://).
 
+The GitHub Actions deploy does this for you: it writes both files from the `DATABRICKS_HOST` secret and the
+`DATABRICKS_WAREHOUSE_ID` variable of the GitHub environment, so a workspace never has to be committed
+([docs/PROMOTION.md](docs/PROMOTION.md)).
+
 **4. Add your own dashboard:**
 
 ```bash
@@ -158,7 +162,7 @@ the optional in-dashboard Ask Genie integration uses a curated Genie agent and i
 - **Ask Genie** about a dashboard, with the page's filters sent as context. Answers show the table and the SQL.
 - **A page kit** (`kit`): filters, KPI tiles, sortable tables with CSV and Excel export, bars, lines, maps, number
   formats. Light and dark themes from one block of CSS variables; the name, logo and locale are configuration.
-- **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites.
+- **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites. Pages can be framed by the app itself and by the workspace (`DATABRICKS_HOST`). Add further https origins, space- or comma-separated, in `FRAME_ANCESTORS` (each must be `https://host` or `https://host:port`, with no path or wildcard). A bad `DATABRICKS_HOST` or `FRAME_ANCESTORS` entry stops the app at start-up. `X-Frame-Options: SAMEORIGIN` is sent only when no other origin is allowed.
 - **Migration helpers.** A Power BI usage report (who views what) to plan the order of work, and a README template
   for recording how each dashboard reconciles with the report it replaces.
 - **Power BI projects to dashboards.** Point Claude Code at a Power BI project in git (PBIP): `scripts/pbip_summary.py`
@@ -252,6 +256,7 @@ The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them
 | [docs/PROMOTION.md](docs/PROMOTION.md) | Moving a change through dev, test and prod |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Moving a report from Power BI, including who uses it today |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Access, restricting sections, cost, usage, troubleshooting |
+| [docs/board.md](docs/board.md) | Open work: branches, pull requests, owners and standing permissions |
 | [docs/decisions/](docs/decisions/README.md) | Decision records: why each feature and design choice was made, and its limits |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding tools (Claude Code, Codex, Cursor) working in this repo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Proposing a change to LakeBoard itself |

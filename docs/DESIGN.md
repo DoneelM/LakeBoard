@@ -154,7 +154,7 @@ same logo with `{{LOGO}}`. `locale:` sets how numbers and dates are written.
 | What data a user sees | `auth: user` (default): the query runs with the user's token, so UC grants, row filters and masks apply |
 | Cache isolation | `auth: user` results are cached **per user**; `auth: app` results are shared, so only use it for data every viewer of that dashboard may see |
 | Part of a dashboard | `groups` on a dataset; the server refuses it to anyone else ([OPERATIONS.md](OPERATIONS.md)) |
-| What a page can do | A Content-Security-Policy lets the browser load scripts and data only from the portal (plus Google Fonts and OpenStreetMap tiles), so a page can't send data elsewhere |
+| What a page can do | A Content-Security-Policy lets the browser load scripts and data only from the portal (fonts are served by the portal itself: Inter, SIL OFL, `src/static/fonts/`; only OpenStreetMap tiles are allowed from elsewhere), so a page can't send data elsewhere. Framing defaults to the portal and the workspace (`frame-ancestors` is `'self'` plus `https://` and the host from `DATABRICKS_HOST`); more https origins can be listed in `FRAME_ANCESTORS`. A bad `DATABRICKS_HOST` or `FRAME_ANCESTORS` entry stops the app at start-up. `X-Frame-Options: SAMEORIGIN` is sent only when the list is just `'self'` |
 | What SQL can read | Read-only statements, and only catalogs on the allow-list |
 | Runaway queries | Stopped after 10 minutes; results capped at 500,000 rows |
 | Ask Genie | Always called with the viewer's token, after the same dashboard `groups` check; not offered on dashboards with `auth: app` data. Questions and answers are shown as text only |
@@ -175,7 +175,8 @@ views. The portal then enforces it automatically, for every dashboard and for Ge
   federated table that takes minutes to scan) never block a reader. Shared datasets with a `warm:` list are
   refreshed at the `warm.times` in `src/environments.yml`.
 - **Warehouse use:** about one query per dataset per user per TTL. Filtering costs nothing.
-- **App use:** one always-on app per environment. Dev and test are stopped after each deploy; prod can be stopped
+- **App use:** one always-on app per environment. In GitHub Actions dev (`develop`) and prod stay running and test is stopped
+  after each deploy; the Azure DevOps pipeline still stops dev and test. Prod can be stopped
   out of hours (`databricks apps stop`) if usage allows (decision 0005).
 
 ## Freshness label
@@ -275,12 +276,16 @@ Two example pipelines do the same thing; use whichever matches your git host.
   and shared-SQL reviews (`src/reviewed_pages.yml`, `src/shared_cache.yml`; decision 0018).
 - **Push to `develop` / `release` / `main`:** install a pinned, checksum-verified Databricks CLI,
   `databricks bundle validate`, run every dataset with `LIMIT 0` against that environment's
-  catalogs, build the source map, `databricks bundle deploy`, then `databricks bundle run portal`. Dev and test are
-  stopped afterwards. Deploys to one environment run one at a time.
+  catalogs, build the source map, `databricks bundle deploy` (through `scripts/deploy_bundle.sh`, which binds an
+  app that already exists, decision 0020), then `databricks bundle run portal`. Test is
+  stopped afterwards (GitHub Actions; Azure DevOps also stops dev). Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a
-  `DATABRICKS_HOST` variable and a service principal's OAuth secret (`DATABRICKS_CLIENT_ID`,
-  `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. A `concurrency` group per environment. An environment
-  with no `DATABRICKS_HOST` skips its deploy with a notice, so a fresh fork's pushes don't fail.
+  `DATABRICKS_HOST` secret (masked in the logs, with its bare host form), a `DATABRICKS_WAREHOUSE_ID` variable and a
+  service principal's OAuth secret (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the
+  secret. The deploy writes the gitignored `databricks.local.yml` and `src/environments.local.yml` from the host and
+  warehouse id (decision 0010). A `concurrency` group per environment. On `DoneelM/LakeBoard`,
+  an environment missing any of the four values fails the job on `main`/`release`/`develop`, naming the keys; forks and unconfigured copies
+  skip the deploy and write a "nothing deployed" job summary, so a fresh fork's pushes don't fail.
 - **Azure DevOps** (`azure-pipelines.yml`): the `databricks-service-connection` service connection (a placeholder);
   hosts come from the `lakeboard-<env>-vars` variable groups. `lockBehavior: sequential` per stage.
 - **Apps:** `lakeboard` (prod), `lakeboard-test`, `lakeboard-dev`.
