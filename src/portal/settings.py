@@ -79,13 +79,19 @@ def normalise_host(value: str | None = None, environ=None) -> str:
     return re.sub(r"^https?://|/+$", "", (value or "").strip().lower())
 
 
-def _https_origin(value: str) -> str:
-    """https://host or https://host:port, with no path, userinfo, query, fragment or wildcard."""
+# Letters, digits, dots, hyphens, or a bracketed IPv6, with an optional numeric port. Rejects ; @ / ? # % and space.
+_STRICT_AUTHORITY = re.compile(r"^(?:[a-z0-9.-]+|\[[0-9a-f:]+\])(?::[0-9]+)?$")
+
+
+def _https_origin(value: str, label: str = "FRAME_ANCESTORS entry") -> str:
+    """https://host or https://host:port, or https://[ipv6][:port], with no path, userinfo, query, fragment or wildcard."""
     from urllib.parse import urlparse
-    if "*" in value:
-        raise ValueError(
-            f"FRAME_ANCESTORS entry {value!r} must be an https origin (https://host or https://host:port), with no path or wildcard"
-        )
+    err = (
+        f"{label} {value!r} must be an https origin (https://host or https://host:port), with no path or wildcard"
+    )
+    if "*" in value or re.search(r"[\s;%]", value):
+        # urlparse strips CR/LF out of the netloc, which would otherwise join two hosts into one.
+        raise ValueError(err)
     parsed = urlparse(value)
     if (
         parsed.scheme != "https"
@@ -98,11 +104,14 @@ def _https_origin(value: str) -> str:
         or parsed.password is not None
         or not parsed.hostname
     ):
-        raise ValueError(
-            f"FRAME_ANCESTORS entry {value!r} must be an https origin (https://host or https://host:port), with no path or wildcard"
-        )
-    host = parsed.hostname
-    return f"https://{host}:{parsed.port}" if parsed.port else f"https://{host}"
+        raise ValueError(err)
+    host = parsed.hostname  # already lowercased; IPv6 without brackets
+    authority = f"[{host}]" if ":" in host else host
+    if parsed.port:
+        authority = f"{authority}:{parsed.port}"
+    if not _STRICT_AUTHORITY.fullmatch(parsed.netloc.lower()) or not _STRICT_AUTHORITY.fullmatch(authority):
+        raise ValueError(err)
+    return f"https://{authority}"
 
 
 def frame_ancestors(environ=None) -> list[str]:
@@ -111,7 +120,7 @@ def frame_ancestors(environ=None) -> list[str]:
     origins = ["'self'"]
     host = normalise_host(environ=environ)
     if host:
-        origins.append(f"https://{host}")
+        origins.append(_https_origin(f"https://{host}", label="DATABRICKS_HOST"))
     raw = (environ.get("FRAME_ANCESTORS") or "").strip()
     if raw:
         for entry in re.split(r"[,\s]+", raw):

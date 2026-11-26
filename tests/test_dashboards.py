@@ -272,11 +272,60 @@ def test_frame_ancestors_appends_env_entries():
     assert x_frame_options(environ={}) == "SAMEORIGIN"
 
 
-@pytest.mark.parametrize("bad", ["*", "http://example.com", "https://example.com/path"])
+@pytest.mark.parametrize("bad", [
+    "*", "http://example.com", "https://example.com/path",
+    "https://example.com;script-src", "https://example.com;report-uri",
+    "https://example.com?x=1", "https://example.com#f", "https://user:pass@host.com",
+    "ftp://example.com", "https://https://example.com", "'self'", "'none'",
+])
 def test_frame_ancestors_rejects_bad_entries_at_startup(bad):
     from portal.settings import frame_ancestors
     with pytest.raises(ValueError, match="FRAME_ANCESTORS"):
         frame_ancestors({"FRAME_ANCESTORS": bad})
+
+
+@pytest.mark.parametrize("bad", [
+    "example.com;script-src", "https://example.com;script-src",
+    "example.com\r\nevil.com", "example.com\nevil.com",
+    "example.com/path", "https://example.com/path",
+    "example.com?x=1", "example.com#frag",
+    "user:pass@host.com", "https://user:pass@host.com",
+    "*", "'self'", "'none'", '"example.com"',
+    "https://https://example.com", "ftp://example.com",
+    "https://ftp://example.com",
+])
+def test_frame_ancestors_rejects_malformed_databricks_host_at_startup(bad):
+    from portal.settings import frame_ancestors
+    with pytest.raises(ValueError, match="DATABRICKS_HOST"):
+        frame_ancestors({"DATABRICKS_HOST": bad, "PORTAL_ENV": "prod"})
+
+
+@pytest.mark.parametrize("raw, origin", [
+    ("https://adb-123.azuredatabricks.net/", "https://adb-123.azuredatabricks.net"),
+    ("adb-123.azuredatabricks.net", "https://adb-123.azuredatabricks.net"),
+    ("HTTPS://ADB-123.AZUREDATABRICKS.NET/", "https://adb-123.azuredatabricks.net"),
+    ("dbc-xxx.cloud.databricks.com", "https://dbc-xxx.cloud.databricks.com"),
+    ("https://dbc-abc.cloud.databricks.com/", "https://dbc-abc.cloud.databricks.com"),
+])
+def test_normal_workspace_hosts_are_accepted_as_frame_ancestors(raw, origin):
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {"DATABRICKS_HOST": raw}
+    assert frame_ancestors(env) == ["'self'", origin]
+    assert x_frame_options(environ=env) is None
+
+
+def test_empty_databricks_host_stays_self_only():
+    from portal.settings import frame_ancestors, x_frame_options
+    for env in ({}, {"DATABRICKS_HOST": ""}, {"DATABRICKS_HOST": "   "}):
+        assert frame_ancestors(env) == ["'self'"]
+        assert x_frame_options(environ=env) == "SAMEORIGIN"
+
+
+def test_ipv6_frame_ancestors_keep_brackets():
+    from portal.settings import frame_ancestors
+    assert frame_ancestors({"FRAME_ANCESTORS": "https://[::1]"}) == ["'self'", "https://[::1]"]
+    assert frame_ancestors({"FRAME_ANCESTORS": "https://[::1]:443"}) == ["'self'", "https://[::1]:443"]
+    assert frame_ancestors({"DATABRICKS_HOST": "https://[::1]/"}) == ["'self'", "https://[::1]"]
 
 
 def test_unhandled_500_sends_security_headers(monkeypatch):
