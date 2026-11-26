@@ -29,7 +29,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # only needed for GitHub OIDC auth
 
 jobs:
   # No secrets or environments here: pull requests (including ones from forks) only run credential-free checks,
@@ -38,11 +37,14 @@ jobs:
     name: Checks (manifests, SQL rules, reviews, tests)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"   # the Python version Databricks Apps uses
-      - run: pip install -r src/requirements.txt fastapi pytest httpx
+      - run: pip install -r src/requirements.txt fastapi pytest httpx ruff==0.17.6
+      - run: ruff check
       - run: python scripts/check.py --static
       - run: python -m pytest -q
 
@@ -63,6 +65,9 @@ jobs:
     needs: [checks, js-tests]
     if: github.event_name != 'pull_request' && contains(fromJSON('["develop", "release", "main"]'), github.ref_name)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # only needed for GitHub OIDC auth
     environment: ${{ github.ref_name == 'main' && 'prod' || github.ref_name == 'release' && 'test' || 'dev' }}
     # One deploy per environment at a time; a later run waits for the earlier one instead of cancelling it.
     concurrency:
@@ -73,24 +78,32 @@ jobs:
       APP_NAME: ${{ github.ref_name == 'main' && 'lakeboard' || github.ref_name == 'release' && 'lakeboard-test' || 'lakeboard-dev' }}
       KEEP_RUNNING: ${{ github.ref_name == 'main' || inputs.keep_running == true }}
       DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
-      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
       # DATABRICKS_AUTH_TYPE: github-oidc   # with OIDC instead of a client secret
+      # DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET are set per step, only where Databricks is called.
     steps:
-      # A fork or a copy that hasn't done the setup above has no host for this environment. Skip the deploy with a
-      # notice rather than fail every push. Environment variables can't be read in a job-level `if`, hence a step.
+      # A missing host on the official repo's deploy branches must fail, not go green. A fork or a copy that hasn't
+      # done the setup above has no host: skip the deploy and say so in the job summary rather than fail every push.
+      # Environment variables can't be read in a job-level `if`, hence a step.
       - name: Check this environment is set up
         id: setup
+        env:
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ -z "$DATABRICKS_HOST" ]; then
-            echo "::notice::No DATABRICKS_HOST variable in the '$TARGET' GitHub environment, so nothing was deployed. See the setup notes at the top of .github/workflows/deploy.yml."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
+          if [ -n "$DATABRICKS_HOST" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ "$REPO" = "DoneelM/LakeBoard" ] && [[ "$BRANCH" =~ ^(main|release|develop)$ ]]; then
+            echo "::error::No DATABRICKS_HOST variable in the '$TARGET' GitHub environment of $REPO, so nothing could be deployed. See the setup notes at the top of .github/workflows/deploy.yml."
+            exit 1
+          else
+            echo "Nothing deployed: no DATABRICKS_HOST variable in the '$TARGET' GitHub environment. See the setup notes at the top of .github/workflows/deploy.yml." >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: steps.setup.outputs.ready == 'true'
-      - uses: actions/setup-python@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         if: steps.setup.outputs.ready == 'true'
         with:
           python-version: "3.11"
@@ -115,10 +128,16 @@ jobs:
 
       - name: Validate bundle
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle validate -t "$TARGET"
 
       - name: Run every dataset (LIMIT 0) against the ${{ env.TARGET }} catalogs
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
           WAREHOUSE=$(databricks bundle validate -t "$TARGET" -o json | python -c "import json,sys; print(json.load(sys.stdin)['variables']['warehouse_id']['value'])")
           python scripts/check.py --env "$TARGET" --warehouse "$WAREHOUSE"
@@ -127,20 +146,32 @@ jobs:
       - name: Build the source map for the freshness label
         continue-on-error: true
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: python scripts/build_sources_map.py --env "$TARGET"
 
       - name: Deploy bundle
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle deploy -t "$TARGET"
 
       - name: Start the app with the new code
         if: steps.setup.outputs.ready == 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: databricks bundle run portal -t "$TARGET"
 
       # Dev and test are stopped again to save cost; start them when you need to test. Also runs when the start
       # step failed, so a broken deploy doesn't leave compute running.
       - name: Stop the app (dev and test)
         if: always() && steps.setup.outputs.ready == 'true' && env.KEEP_RUNNING != 'true'
+        env:
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
           for attempt in 1 2 3 4 5; do
             if databricks -t "$TARGET" apps stop "$APP_NAME"; then exit 0; fi
