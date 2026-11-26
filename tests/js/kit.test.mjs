@@ -80,3 +80,21 @@ test('h builds elements', () => {
   assert.equal(el.handlers.click, fn);
   assert.deepEqual(el.children, ['a<b>', 'x', 'y']);
 });
+
+test('numberIn finds the one number a tile can count up', () => {
+  const { numberIn } = kit;
+  assert.deepEqual(numberIn('$25.2m'), { pre: '$', post: 'm', value: 25.2, dp: 1, group: false });
+  assert.deepEqual(numberIn('1,137,325'), { pre: '', post: '', value: 1137325, dp: 0, group: true });
+  assert.deepEqual(numberIn('21.5%'), { pre: '', post: '%', value: 21.5, dp: 1, group: false });
+  assert.deepEqual(numberIn('13.0 mph'), { pre: '', post: ' mph', value: 13, dp: 1, group: false });
+  assert.deepEqual(numberIn('-$1,234.50'), { pre: '-$', post: '', value: 1234.5, dp: 2, group: true });
+});
+
+test('numberIn leaves values it cannot count up as they are', () => {
+  const { numberIn } = kit;
+  assert.equal(numberIn('1992–1997'), null);   // two numbers
+  assert.equal(numberIn('Jan 2016'), null);    // a word before the number
+  assert.equal(numberIn('–'), null);           // blank
+  assert.equal(numberIn(''), null);
+  assert.equal(numberIn(null), null);
+});
