@@ -39,8 +39,8 @@ def current_user(request: Request) -> User:
         make = lambda: WorkspaceClient(profile=LOCAL_PROFILE)  # noqa: E731
     else:
         raise HTTPException(401, "No user token. Open the portal through Databricks Apps.")
-    now = time.monotonic()
     with _identities_guard:
+        now = time.monotonic()  # read after the lock is held; a wait must not serve an already-expired entry
         for k, v in list(_identities.items()):  # snapshot under the lock: a concurrent insert cannot change the dict mid-loop
             if v[0] <= now:  # expired entries still hold a client and token
                 _identities.pop(k, None)
@@ -52,10 +52,11 @@ def current_user(request: Request) -> User:
     user = User(key=me.id or me.user_name, email=me.user_name or "", groups=frozenset(g.display for g in (me.groups or []) if g.display),
                 client=client)
     with _identities_guard:
+        now = time.monotonic()
         hit = _identities.get(cache_key)
-        if hit and hit[0] > time.monotonic():
+        if hit and hit[0] > now:
             return hit[1]
-        _identities[cache_key] = (time.monotonic() + _IDENTITY_TTL, user)
+        _identities[cache_key] = (now + _IDENTITY_TTL, user)
         return user
 
 
