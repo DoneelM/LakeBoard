@@ -93,5 +93,11 @@ A dashboard can say `page: artifact` in `dashboard.yml` (default `page: lakeboar
 the runtime in `src/static/dash.js`; tokens in `src/static/shell.css` and `src/static/artifact.css`; the snapshot
 preview in `src/portal/snapshots.py`.
 
+## Update 2026-11-26: the sample page was removed
+`src/dashboards/artifact-demo/` read `samples.tpch`, whose values are spread evenly, so every chart on it was flat. It
+was removed with the other TPC-H sample (decision 0021). The runtime is unchanged and still covered by
+`tests/test_artifact_runtime.py`, which builds artifact pages in a temporary folder. The next imported Claude
+artifact (skill `import-claude-dashboard`) becomes the working example.
+
 ## Links
 `src/dashboards/artifact-demo/`; `tests/test_artifact_runtime.py`; `docs/DESIGN.md` (Page runtime).

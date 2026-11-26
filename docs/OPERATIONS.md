@@ -38,7 +38,7 @@ The checks refuse one unless both the dashboard and the dataset name their `grou
 
 ### The sample dashboards
 
-The sample dashboards (City Trips, Sales & Margin, Bakery Franchises, Travel Marketplace, Guest Experience,
+The sample dashboards (City Trips, Bakery Franchises, Travel Operations, Travel Marketplace, Guest Experience,
 Omnichannel Retail and World Weather) read the built-in `samples` catalog, which every user in the
 workspace can usually read. They have `groups: []`, so everyone who can open the portal sees them. Delete their
 folders when you add your own, or keep them out of prod with `environments: [dev]`.
@@ -183,7 +183,7 @@ Notes:
 ### What the sample dashboards use
 
 All sample dashboards read sample data that never changes and has no row-level security, so their datasets use
-`cache: shared` with a long `cache_ttl` (6 to 24 hours). City Trips and Sales & Margin also `warm:` their default
+`cache: shared` with a long `cache_ttl` (6 to 24 hours). City Trips also `warm:`s its default
 filters once per process with `warm_at: startup`, so scheduled warms do not re-query fixed samples. Each dashboard's `dashboard.yml` says why in a comment.
 
 ### Example: a prod weekday

@@ -258,13 +258,6 @@ def test_deployed_app_never_turns_on_snapshot_preview(monkeypatch):
     assert not snapshots.preview_enabled()
 
 
-def test_demo_dashboard_is_an_artifact():
-    from portal.registry import DASHBOARDS_DIR
-    d = load_dashboard(DASHBOARDS_DIR / "artifact-demo", env="prod")
-    assert d.errors == [] and d.page_kind == "artifact" and sorted(d.assets) == ["charts.js", "theme.css"]
-    assert all(ds.shared and not ds.todo for ds in d.datasets.values())
-
-
 def test_artifact_tokens_are_defined():
     """Every design token an artifact may rely on has a LakeBoard definition."""
     static = os.path.join(os.path.dirname(__file__), "..", "src", "static")

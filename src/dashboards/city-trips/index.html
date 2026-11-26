@@ -1,50 +1,172 @@
 <style>
 /* Own classes and ids start with ct- so they can't clash with the shell. Colours come from the theme variables. */
 .ct-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
-.ct-bar .kit-filters { flex: 1 1 auto; }
+.ct-bar .kit-filters { flex: 0 1 auto; }
+.ct-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ct-presets span { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-fg-muted); margin-right: 2px; }
 .ct-section { margin-top: 12px; }
-.ct-note { margin: 8px 0 0; font-size: 12px; color: var(--color-fg-muted); }
-.ct-heat rect { stroke: var(--color-panel); stroke-width: 1; }
+.ct-wide { grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); }
+.ct-note { margin: 10px 0 0; font-size: 12px; color: var(--color-fg-muted); }
+.ct-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; }
+.ct-head h2 { margin: 0 0 4px; font-size: 15px; font-weight: 700; letter-spacing: -.005em; }
+.ct-head + .kit-card-sub { margin: 0 0 12px; font-size: 12.5px; color: var(--color-fg-muted); }
+.ct-beyond { margin-top: 14px; }
+.ct-beyond h3 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-fg-muted); }
+.ct-heat rect.ct-cell { stroke: var(--color-panel); stroke-width: 1; transition: opacity .15s; }
+.ct-heat rect.ct-cell:hover { stroke: var(--color-fg); stroke-width: 2; }
+.ct-heat rect.ct-peak { stroke: var(--signal-warn); stroke-width: 2; }
+.ct-flow path { mix-blend-mode: normal; transition: opacity .15s; cursor: default; }
+.ct-flow:hover path.ct-rib { opacity: .18; }
+.ct-flow path.ct-rib:hover { opacity: .9; }
+.ct-flow text { fill: var(--color-fg); font: 12px var(--font-sans); }
+.ct-flow text.ct-n { fill: var(--color-fg-muted); font-size: 11px; }
+.ct-flow .ct-colhead { fill: var(--color-fg-muted); font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.ct-split { display: grid; gap: 10px; margin-bottom: 14px; }
+.ct-split-row { display: grid; grid-template-columns: 4.5rem 1fr 3.5rem; gap: 10px; align-items: center; font-size: 13px; }
+.ct-split-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.ct-split-track { display: flex; height: 22px; background: color-mix(in srgb, var(--cds-chart-grid) 70%, transparent); overflow: hidden; }
+.ct-split-track span { display: block; height: 100%; transition: width .9s var(--cds-ease-out); }
+.ct-airport { background: linear-gradient(90deg, var(--signal-warn), color-mix(in srgb, var(--signal-warn) 70%, var(--accent))); }
+.ct-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 10px; margin: 4px 0 14px; }
+.ct-vs div { border-left: 3px solid var(--color-border-line); padding-left: 10px; }
+.ct-vs div:first-child { border-left-color: var(--signal-warn); }
+.ct-vs strong { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ct-vs span { font-size: 12px; color: var(--color-fg-muted); }
+.ct-toggle { display: inline-flex; gap: 0; }
+.ct-toggle .kit-btn + .kit-btn { border-left: 0; }
+.ct-zipname { color: var(--color-fg-muted); }
 </style>
 
 <div class="kit-page">
+  <span class="kit-eyebrow">New York City · Yellow taxi · January to February 2016</span>
   <h1>City Trips</h1>
-  <p class="kit-sub">Yellow-taxi trips in New York City, January and February 2016, from the Databricks <code>samples.nyctaxi.trips</code> table.</p>
+  <p class="kit-sub">A sample of 21,932 New York yellow-taxi trips from the Databricks <code>samples.nyctaxi.trips</code> table: when the city rides, how fast it moves, where it goes and the weekend a blizzard stopped it.</p>
 
   <div class="ct-bar">
     <div id="ct-filters"></div>
-    <button type="button" class="kit-btn" id="ct-reset">Reset dates</button>
+    <div class="ct-presets" role="group" aria-label="Date presets">
+      <span>Jump to</span>
+      <button type="button" class="kit-btn" data-from="2016-01-01" data-to="2016-02-29">Whole sample</button>
+      <button type="button" class="kit-btn" data-from="2016-01-01" data-to="2016-01-31">January</button>
+      <button type="button" class="kit-btn" data-from="2016-02-01" data-to="2016-02-29">February</button>
+      <button type="button" class="kit-btn" data-from="2016-01-20" data-to="2016-01-27">Storm week</button>
+    </div>
   </div>
 
+  <div id="ct-insight" data-source="daily"></div>
   <div id="ct-tiles" data-source="daily"></div>
 
-  <div class="kit-grid ct-section">
-    <section class="kit-card" data-source="daily"><h2>Trips per day</h2><div id="ct-trend"></div></section>
-    <section class="kit-card" data-source="hours"><h2>When people ride</h2><div id="ct-heat"></div><p class="ct-note" id="ct-heat-note"></p></section>
+  <section class="kit-card ct-section" data-source="daily">
+    <h2>Trips per day, against a normal day</h2>
+    <p class="kit-card-sub">Shaded: the usual range for that weekday across the whole sample (middle half of days). Marked: days far from normal. Hover for the numbers.</p>
+    <div id="ct-trend"></div>
+  </section>
+
+  <div class="kit-grid ct-wide ct-section">
+    <section class="kit-card" data-source="hourly">
+      <h2 id="ct-storm-title">Hour by hour</h2>
+      <p class="kit-card-sub" id="ct-storm-sub"></p>
+      <div id="ct-storm"></div>
+    </section>
+    <section class="kit-card" data-source="pace">
+      <h2 id="ct-pace-title">How fast the city moves</h2>
+      <p class="kit-card-sub" id="ct-pace-sub">Average speed of trips starting each hour: miles driven ÷ hours driven.</p>
+      <div id="ct-pace"></div>
+    </section>
   </div>
 
-  <div class="kit-grid ct-section">
-    <section class="kit-card" data-source="zips"><h2>Busiest pickup ZIP codes</h2><div id="ct-pickup"></div></section>
-    <section class="kit-card" data-source="zips"><h2>Busiest dropoff ZIP codes</h2><div id="ct-dropoff"></div></section>
+  <div class="kit-grid ct-wide ct-section">
+    <section class="kit-card" data-source="hours">
+      <h2>When the city rides</h2>
+      <p class="kit-card-sub">Trips by weekday and hour of pickup. Brighter is busier; the busiest hour is outlined.</p>
+      <div id="ct-heat"></div>
+      <p class="ct-note" id="ct-heat-note"></p>
+    </section>
+    <section class="kit-card" data-source="zips">
+      <div class="ct-head">
+        <h2>Busiest ZIP codes</h2>
+        <div class="ct-toggle" role="group" aria-label="Pickups or dropoffs">
+          <button type="button" class="kit-btn" data-dir="pickup" aria-pressed="true">Pickups</button>
+          <button type="button" class="kit-btn" data-dir="dropoff" aria-pressed="false">Dropoffs</button>
+        </div>
+      </div>
+      <p class="kit-card-sub">The ten busiest, with the neighbourhood where a ZIP code is well known. A ZIP code can span more than one.</p>
+      <div id="ct-zips"></div>
+    </section>
+  </div>
+
+  <div class="kit-grid ct-wide ct-section">
+    <section class="kit-card" data-source="flows">
+      <h2 id="ct-flow-title">Where trips go</h2>
+      <p class="kit-card-sub">Pickup area on the left, dropoff area on the right; each band's width is its share of trips. Areas under 1% are grouped.</p>
+      <div id="ct-flow"></div>
+      <div class="ct-beyond"><h3>Biggest flows outside Manhattan</h3><div id="ct-beyond"></div></div>
+    </section>
+    <section class="kit-card" data-source="flows">
+      <h2 id="ct-air-title">Airport runs</h2>
+      <p class="kit-card-sub">Trips to or from JFK, LaGuardia and Newark, against every other trip.</p>
+      <div id="ct-air"></div>
+      <p class="ct-note" id="ct-air-note"></p>
+    </section>
   </div>
 
   <section class="kit-card ct-section" data-source="bands">
-    <h2>Fares by trip distance</h2>
+    <h2 id="ct-bands-title">Fares by trip distance</h2>
+    <p class="kit-card-sub">Thick bar: the middle half of fares (25th to 75th percentile). Thin line: 10th to 90th. Tick: median. Hover a band for its numbers.</p>
     <div id="ct-bands"></div>
-    <p class="ct-note">Thick bar: the middle half of fares (25th to 75th percentile). Thin line: 10th to 90th. Tick: median.</p>
   </section>
 
-  <section class="kit-card ct-section" data-source="daily"><h2>Day by day</h2><div id="ct-table"></div></section>
+  <section class="kit-card ct-section" data-source="daily">
+    <h2>Day by day</h2>
+    <p class="kit-card-sub">Every day in the dates picked, with how far it was from a normal day for that weekday.</p>
+    <div id="ct-table"></div>
+  </section>
 </div>
 
 <script>
 (() => {
   const { fmt, num, h } = kit;
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const FIRST = '2016-01-01', LAST = '2016-02-29';  // the span of the sample data
   const defaults = dash.params();                  // date_from and date_to from dashboard.yml
 
-  // Dates are SQL parameters: changing them reloads every dataset (from the shared cache when someone has asked already).
+  // Things that happened in New York, so a day far from normal can say why. Shown only when the data shows the day
+  // as unusual and it is in the dates picked. Source: New York State and City announcements, 22 to 24 January 2016.
+  const EVENTS = {
+    '2016-01-23': {
+      label: 'Blizzard', name: 'Winter Storm Jonas',
+      note: 'Winter Storm Jonas dropped about 27 inches of snow on Central Park. New York banned non-emergency road travel from 2:30 pm Saturday to 7 am Sunday.',
+      ban: { from: '2016-01-23 14:30', to: '2016-01-24 07:00', label: 'Travel ban' },
+    },
+  };
+  // Neighbourhoods for ZIP codes that are well known. A ZIP code can cover more than one; this names the main one.
+  const ZIP_NAMES = {
+    10001: 'Chelsea · Penn Station', 10002: 'Lower East Side', 10003: 'East Village · Union Sq', 10004: 'Financial District',
+    10005: 'Financial District', 10006: 'Financial District', 10007: 'Tribeca · City Hall', 10009: 'East Village',
+    10010: 'Gramercy · Flatiron', 10011: 'Chelsea', 10012: 'SoHo · Greenwich Village', 10013: 'Tribeca · SoHo',
+    10014: 'West Village', 10016: 'Murray Hill', 10017: 'Midtown East · Grand Central', 10018: 'Garment District',
+    10019: 'Midtown West', 10020: 'Rockefeller Center', 10021: 'Upper East Side', 10022: 'Midtown East',
+    10023: 'Upper West Side', 10024: 'Upper West Side', 10025: 'Upper West Side', 10026: 'Harlem', 10027: 'Harlem',
+    10028: 'Upper East Side', 10029: 'East Harlem', 10036: 'Times Square', 10038: 'Financial District · Seaport',
+    10065: 'Upper East Side', 10075: 'Upper East Side', 10128: 'Upper East Side', 10280: 'Battery Park City',
+    10282: 'Battery Park City', 11371: 'LaGuardia Airport', 11430: 'JFK Airport', 7114: 'Newark Airport',
+  };
+  const AIRPORTS = ['LaGuardia', 'JFK', 'Newark'];
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const iso = kit.isoDate;
+  const parseDay = (s) => new Date(String(s).slice(0, 10) + 'T00:00:00');
+  const wd = (s) => (parseDay(s).getDay() + 6) % 7;                 // 0 = Monday
+  const addDays = (s, n) => { const d = parseDay(s); d.setDate(d.getDate() + n); return iso(d); };
+  const longDay = (s) => parseDay(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const hourLabel = (hr) => `${pad(hr)}:00`;
+  const clock = (hr) => (hr === 0 ? 'midnight' : hr === 12 ? 'noon' : hr < 12 ? `${hr} am` : `${hr - 12} pm`);
+  const pct = (v, dp = 0) => { const r = +(v * 100).toFixed(dp); return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(dp)}%`; };
+  const colourOf = (area) => ({ Manhattan: dash.colors[0], Brooklyn: dash.colors[1], Queens: dash.colors[4], Bronx: dash.colors[7],
+    'Staten Island': dash.colors[5], LaGuardia: dash.colors[3], JFK: dash.colors[3], Newark: dash.colors[3] })[area] || dash.colors[2];
+
+  // ---- Filters: dates are SQL parameters, so changing them reloads every dataset except the whole-sample baseline.
   const bar = kit.filters('#ct-filters', [
     { id: 'date_from', label: 'From', type: 'date', value: defaults.date_from, min: FIRST, max: LAST },
     { id: 'date_to', label: 'To', type: 'date', value: defaults.date_to, min: FIRST, max: LAST },
@@ -54,10 +176,12 @@
     if (to < v.date_from) { to = v.date_from; bar.set('date_to', to); }
     dash.setParams({ date_from: v.date_from, date_to: to });
   });
-  document.getElementById('ct-reset').addEventListener('click', () => {
-    bar.set('date_from', defaults.date_from); bar.set('date_to', defaults.date_to);
-    dash.resetParams();
+  const presets = [...document.querySelectorAll('.ct-presets .kit-btn')];
+  for (const b of presets) b.addEventListener('click', () => {
+    bar.set('date_from', b.dataset.from); bar.set('date_to', b.dataset.to);
+    dash.setParams({ date_from: b.dataset.from, date_to: b.dataset.to });
   });
+  const markPreset = () => { const p = dash.params(); for (const b of presets) b.setAttribute('aria-pressed', String(b.dataset.from === p.date_from && b.dataset.to === p.date_to)); };
 
   // kit.ready covers loading and errors; this covers a date range with no trips.
   const empty = (sel, rows) => {
@@ -66,33 +190,391 @@
     return true;
   };
 
-  function drawDaily() {
+  // ---- The baseline: every hour of the sample with zeros filled in, the trips of each day, and what is normal for
+  // each weekday (median and middle half of the sample's days) and each weekday-hour (median).
+  let base = null;
+  function baseline() {
+    const d = dash.data('hourly');
+    if (d.status !== 'ok' || !d.data.length) return null;
+    if (base && base.rows === d.data) return base;
+    const count = new Map(d.data.map((r) => [r.hour_start, num(r.trips)]));
+    const hours = [], days = new Map();
+    for (let day = FIRST; day <= LAST; day = addDays(day, 1)) {
+      let total = 0;
+      for (let hr = 0; hr < 24; hr++) {
+        const key = `${day} ${pad(hr)}:00`, n = count.get(key) || 0;
+        hours.push({ hour_start: key, day, hr, wd: wd(day), trips: n });
+        total += n;
+      }
+      days.set(day, total);
+    }
+    const byWd = d3.group([...days].map(([day, n]) => ({ day, n })), (r) => wd(r.day));
+    const dayNorm = new Map([...byWd].map(([k, g]) => {
+      const v = g.map((r) => r.n).sort(d3.ascending);
+      return [k, { med: d3.quantileSorted(v, 0.5), lo: d3.quantileSorted(v, 0.25), hi: d3.quantileSorted(v, 0.75) }];
+    }));
+    const hourNorm = d3.rollup(hours, (g) => d3.median(g, (r) => r.trips), (r) => r.wd, (r) => r.hr);
+    const devOf = (day) => { const n = dayNorm.get(wd(day)); return n && n.med ? (days.get(day) - n.med) / n.med : null; };
+    base = { rows: d.data, hours, days, dayNorm, hourNorm, devOf };
+    return base;
+  }
+
+  // The most unusual day in the dates picked (30% or more below normal), with the storm details when it is one.
+  function worstDay(dayRows, b) {
+    let worst = null;
+    for (const r of dayRows) {
+      const dev = b.devOf(r.day);
+      if (dev !== null && dev <= -0.3 && (!worst || dev < worst.dev)) worst = { day: r.day, dev };
+    }
+    if (!worst) return null;
+    // The longest run of hours with no trips, from the day before to the day after.
+    let run = 0, best = { len: 0 };
+    for (const hr of b.hours) {
+      if (hr.day < addDays(worst.day, -1) || hr.day > addDays(worst.day, 1)) continue;
+      run = hr.trips === 0 ? run + 1 : 0;
+      if (run > best.len) best = { len: run, end: hr };
+    }
+    const gap = best.len >= 3 ? { len: best.len, start: b.hours[b.hours.indexOf(best.end) - best.len + 1], end: best.end } : null;
+    // Days until trips came back to within 15% of normal.
+    let recover = 0;
+    for (let day = worst.day; day <= LAST && b.devOf(day) <= -0.15; day = addDays(day, 1)) recover++;
+    return { ...worst, event: EVENTS[worst.day] || null, gap, recover };
+  }
+
+  // ---- Headline and tiles
+  function drawTop() {
     const d = dash.data('daily');
-    const parts = ['#ct-tiles', '#ct-trend', '#ct-table'];
-    if (!parts.map((sel) => kit.ready(sel, d)).every(Boolean)) return;  // each part shows "Loading…" or the error
-    // Sum the days, then divide: an average of daily averages would weight quiet days too heavily.
+    if (!kit.ready('#ct-tiles', d)) { kit.ready('#ct-insight', d); return; }
+    if (!d.data.length) { empty('#ct-tiles', d.data); document.getElementById('ct-insight').replaceChildren(); return; }
     const t = { trips: 0, fares: 0, miles: 0, minutes: 0 };
     for (const r of d.data) for (const k in t) t[k] += num(r[k]) || 0;
     const per = (x) => (t.trips ? x / t.trips : null);
+    const pace = dash.data('pace'), flows = dash.data('flows');
+    const speed = pace.status === 'ok' && pace.data.length ? d3.sum(pace.data, (r) => num(r.miles)) / d3.sum(pace.data, (r) => num(r.hours)) : null;
+    const weekdaySpeeds = pace.status === 'ok' ? pace.data.filter((r) => r.part === 'weekday').sort((a, b) => num(a.hour) - num(b.hour)).map((r) => num(r.miles) / num(r.hours)) : [];
+    const manhattan = flows.status === 'ok' && flows.data.length
+      ? d3.sum(flows.data.filter((r) => r.from_area === 'Manhattan' && r.to_area === 'Manhattan'), (r) => num(r.trips)) / d3.sum(flows.data, (r) => num(r.trips)) : null;
     kit.tiles('#ct-tiles', [
-      { label: 'Trips', value: fmt.num(t.trips), note: `${fmt.num(d.data.length)} days` },
-      { label: 'Fares', value: fmt.money(t.fares) },
-      { label: 'Average fare', value: fmt.money(per(t.fares), 2) },
-      { label: 'Average distance', value: per(t.miles) === null ? fmt.text(null) : `${fmt.num(per(t.miles), 1)} mi` },
-      { label: 'Average trip', value: per(t.minutes) === null ? fmt.text(null) : `${fmt.num(per(t.minutes), 0)} min` },
+      { label: 'Trips', value: fmt.num(t.trips), note: `${fmt.num(d.data.length)} days · about ${fmt.num(t.trips / d.data.length)} a day`, spark: d.data.map((r) => r.trips) },
+      { label: 'Fares', value: fmt.money(t.fares), note: 'Meter fares, before tips and tolls', spark: d.data.map((r) => r.fares) },
+      { label: 'Average fare', value: fmt.money(per(t.fares), 2), note: `${fmt.num(per(t.miles), 1)} miles and ${fmt.num(per(t.minutes), 0)} minutes a trip` },
+      { label: 'Average speed', value: speed === null ? fmt.text(null) : `${fmt.num(speed, 1)} mph`, note: 'Line: weekday speed, midnight to midnight', spark: weekdaySpeeds.length > 1 ? weekdaySpeeds : null },
+      { label: 'Manhattan to Manhattan', value: manhattan === null ? fmt.text(null) : fmt.pct(manhattan, 0), note: 'of trips start and end there' },
     ]);
-    if (!d.data.length) { empty('#ct-trend', d.data); empty('#ct-table', d.data); return; }
-    kit.line('#ct-trend', { rows: d.data, x: 'day', series: [{ key: 'trips', label: 'Trips' }], label: 'Trips per day' });
+    drawInsight(d.data);
+  }
 
+  function drawInsight(dayRows) {
+    const el = document.getElementById('ct-insight');
+    const b = baseline();
+    const w = b ? worstDay(dayRows, b) : null;
+    if (w) {
+      const name = DAY_NAMES[wd(w.day)];
+      const stats = [{ value: pct(w.dev), label: `vs a normal ${name}` }];
+      if (w.gap) stats.push({ value: `${w.gap.len} h`, label: 'without a single trip' });
+      if (w.recover > 1) stats.push({ value: `${w.recover} days`, label: 'to get back to normal' });
+      const gapText = w.gap ? ` Not one trip was recorded for ${w.gap.len} hours, from ${clock(w.gap.start.hr)} ${DAY_NAMES[w.gap.start.wd]} to ${clock((w.gap.end.hr + 1) % 24)} ${DAY_NAMES[(w.gap.end.hr + 1) === 24 ? (w.gap.end.wd + 1) % 7 : w.gap.end.wd]}.` : '';
+      kit.insight(el, {
+        eyebrow: w.event ? `What happened · ${w.event.name}` : 'What happened',
+        title: `On ${longDay(w.day)}, taxi trips fell ${Math.round(-w.dev * 100)}% below a normal ${name}.`,
+        body: (w.event ? w.event.note : 'The data shows the drop; it does not say why.') + gapText,
+        tone: 'warn', stats,
+      });
+      return;
+    }
+    // No unusual day in these dates: lead with the city's rhythm instead.
+    const pace = dash.data('pace');
+    if (pace.status !== 'ok' || !pace.data.length) { el.replaceChildren(); el.className = ''; return; }
+    const wk = pace.data.filter((r) => r.part === 'weekday' && num(r.trips) >= 30).map((r) => ({ hr: num(r.hour), mph: num(r.miles) / num(r.hours), trips: num(r.trips) }));
+    if (!wk.length) { el.replaceChildren(); el.className = ''; return; }
+    const fast = d3.greatest(wk, (r) => r.mph), slow = d3.least(wk, (r) => r.mph), busy = d3.greatest(wk, (r) => r.trips);
+    kit.insight(el, {
+      eyebrow: 'The pattern',
+      title: `Weekday taxis move at ${fmt.num(fast.mph, 0)} mph at ${clock(fast.hr)} and ${fmt.num(slow.mph, 0)} mph at ${clock(slow.hr)}.`,
+      body: `Traffic, not distance, sets the pace: the busiest weekday hour is ${clock(busy.hr)}, when the city is at its slowest. Pick “Storm week” to see the day New York stopped.`,
+      stats: [{ value: `${fmt.num(fast.mph / slow.mph, 1)}×`, label: 'faster before dawn' }, { value: clock(busy.hr), label: 'busiest weekday hour' }],
+    });
+  }
+
+  // ---- Trips per day against the normal range for that weekday
+  function drawTrend() {
+    const d = dash.data('daily');
+    if (!kit.ready('#ct-trend', d) || empty('#ct-trend', d.data)) return;
+    const b = baseline();
+    const rows = d.data.map((r) => {
+      const n = b && b.dayNorm.get(wd(r.day));
+      return { ...r, lo: n ? n.lo : null, hi: n ? n.hi : null, normal: n ? n.med : null, dev: b ? b.devOf(r.day) : null };
+    });
+    // Mark the worst day of each run of unusual days, so the labels don't pile up.
+    const marks = [];
+    for (const r of rows) {
+      if (r.dev === null || Math.abs(r.dev) < 0.3) continue;
+      const near = marks.find((m) => Math.abs(parseDay(m.x) - parseDay(r.day)) <= 3 * 864e5);
+      const ev = EVENTS[r.day];
+      const mk = { x: r.day, dev: r.dev, label: `${ev ? ev.label + ' ' : ''}${pct(r.dev)}`, note: ev ? ev.note : '' };
+      if (!near) marks.push(mk); else if (Math.abs(r.dev) > Math.abs(near.dev)) Object.assign(near, mk);
+    }
+    kit.line('#ct-trend', {
+      rows, x: 'day', height: 300, label: 'Trips per day against the normal range for that weekday',
+      series: [{ key: 'trips', label: 'Trips' }],
+      band: b ? { low: 'lo', high: 'hi', label: 'Normal for that weekday' } : null,
+      marks, fmt: (v) => fmt.num(v),
+      tip: (r) => (r.normal === null ? [] : [`${pct(r.dev)} vs a normal ${DAY_NAMES[wd(r.day)]} (${fmt.num(r.normal)})`].concat(EVENTS[r.day] && Math.abs(r.dev) >= 0.3 ? [EVENTS[r.day].name] : [])),
+    });
+  }
+
+  // ---- The storm (or the last week picked), hour by hour, against a normal hour
+  function drawStorm() {
+    const d = dash.data('hourly'), days = dash.data('daily');
+    if (!kit.ready('#ct-storm', d, days)) return;
+    const b = baseline();
+    if (!b || empty('#ct-storm', days.data)) return;
+    const w = worstDay(days.data, b);
+    const p = dash.params();
+    const from = w ? addDays(w.day, -2) : (addDays(p.date_to, -6) < p.date_from ? p.date_from : addDays(p.date_to, -6));
+    const to = w ? addDays(w.day, 3) : p.date_to;
+    const rows = b.hours.filter((r) => r.day >= from && r.day <= to)
+      .map((r) => ({ hour_start: r.hour_start, trips: r.trips, normal: b.hourNorm.get(r.wd).get(r.hr) }));
+    const ev = w && w.event;
+    document.getElementById('ct-storm-title').textContent = ev ? `The ${ev.label.toLowerCase()}, hour by hour` : w ? `Around ${longDay(w.day)}, hour by hour` : 'The last week picked, hour by hour';
+    document.getElementById('ct-storm-sub').textContent = 'Each point is one hour. Dashed: a normal hour for that weekday and time (median of the whole sample).'
+      + (ev && ev.ban ? ' Shaded: the road travel ban.' : '');
+    kit.line('#ct-storm', {
+      rows, x: 'hour_start', height: 260, area: true, label: 'Trips per hour against a normal hour',
+      series: [{ key: 'trips', label: 'Trips this hour' }, { key: 'normal', label: 'A normal hour', dash: true, color: 'var(--color-fg-muted)' }],
+      spans: ev && ev.ban ? [ev.ban] : [], fmt: (v) => fmt.num(v),
+    });
+  }
+
+  // ---- Speed by hour, weekdays against weekends
+  function drawPace() {
+    const d = dash.data('pace');
+    if (!kit.ready('#ct-pace', d) || empty('#ct-pace', d.data)) return;
+    const by = new Map();
+    for (const r of d.data) {
+      const row = by.get(num(r.hour)) || by.set(num(r.hour), { hour: num(r.hour) }).get(num(r.hour));
+      // An hour with only a few trips says little about traffic: leave it out rather than draw a spike.
+      row[r.part] = num(r.hours) > 0 && num(r.trips) >= 20 ? +(num(r.miles) / num(r.hours)).toFixed(1) : null;
+      row[r.part + '_trips'] = num(r.trips);
+    }
+    const rows = [...by.values()].sort((a, b) => a.hour - b.hour);
+    const wk = rows.filter((r) => r.weekday !== undefined && (r.weekday_trips || 0) >= 30);
+    if (wk.length) {
+      const fast = d3.greatest(wk, (r) => r.weekday), slow = d3.least(wk, (r) => r.weekday);
+      const ratio = slow.weekday / fast.weekday;
+      document.getElementById('ct-pace-title').textContent = ratio <= 0.5 ? 'Rush hour halves the city’s speed' : ratio <= 0.7 ? 'Rush hour slows the city by a third' : 'How fast the city moves';
+      document.getElementById('ct-pace-sub').textContent = `Weekdays: ${fmt.num(fast.weekday, 0)} mph at ${clock(fast.hour)}, ${fmt.num(slow.weekday, 0)} mph at ${clock(slow.hour)}. Average speed of trips starting each hour (miles ÷ hours driven); meter errors and hours with under 20 trips left out.`;
+    }
+    kit.line('#ct-pace', {
+      rows, x: 'hour', xType: 'number', xFmt: (v) => hourLabel(v), height: 260, area: false, label: 'Average taxi speed by hour, weekdays and weekends',
+      series: [{ key: 'weekday', label: 'Weekdays', color: dash.colors[0] }, { key: 'weekend', label: 'Weekends', color: dash.colors[1] }],
+      fmt: (v) => `${fmt.num(v, 0)} mph`,
+      tip: (r) => [`${fmt.num(r.weekday_trips)} weekday and ${fmt.num(r.weekend_trips)} weekend trips`],
+    });
+  }
+
+  // ---- Heatmap: weekday rows x hour columns
+  function drawHeat() {
+    const d = dash.data('hours'), days = dash.data('daily');
+    const note = document.getElementById('ct-heat-note');
+    note.textContent = '';
+    if (!kit.ready('#ct-heat', d) || empty('#ct-heat', d.data)) return;
+    const el = document.getElementById('ct-heat');
+    const count = new Map(d.data.map((r) => [`${r.weekday}-${r.hour}`, num(r.trips)]));
+    const max = Math.max(...count.values());
+    const top = d.data.reduce((a, b) => (num(b.trips) > num(a.trips) ? b : a));
+    const W = Math.max(300, el.clientWidth), m = { t: 4, r: 4, b: 22, l: 34 }, gap = 6;
+    const cw = (W - m.l - m.r) / 24, ch = Math.max(16, Math.min(28, cw * 1.15)), H = m.t + ch * 7 + gap + m.b;
+    const rowY = (wdI) => m.t + ch * wdI + (wdI >= 5 ? gap : 0);
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart ct-heat').attr('role', 'img').attr('aria-label', 'Trips by weekday and hour of pickup');
+    const tip = { show: (...a) => kit.tip(el).show(...a), hide: () => kit.tip(el).hide() };  // looked up after the redraw
+    const scale = d3.scaleSqrt().domain([0, max]).range([0.05, 1]);
+    DAYS.forEach((day, wdI) => {
+      svg.append('text').attr('x', m.l - 6).attr('y', rowY(wdI) + ch / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text(day);
+      for (let hr = 0; hr < 24; hr++) {
+        const n = count.get(`${wdI}-${hr}`) || 0;
+        const peak = String(top.weekday) === String(wdI) && String(top.hour) === String(hr);
+        svg.append('rect').attr('class', 'ct-cell' + (peak ? ' ct-peak' : '')).attr('x', m.l + cw * hr).attr('y', rowY(wdI)).attr('width', cw).attr('height', ch)
+          .attr('fill', dash.colors[0]).attr('fill-opacity', scale(n))
+          .on('pointerenter', (ev) => {
+            const sc = el.getBoundingClientRect().width / W;
+            tip.show((m.l + cw * hr + cw / 2) * sc, rowY(wdI) * sc, h('strong', null, `${DAY_NAMES[wdI]}, ${hourLabel(hr)}`), h('div', null, `${fmt.num(n)} trips`),
+              h('div', { class: 'kit-tip-note' }, `${Math.round((n / max) * 100)}% of the busiest hour`));
+          })
+          .on('pointerleave', () => tip.hide());
+      }
+    });
+    for (let hr = 0; hr < 24; hr += 3) svg.append('text').attr('x', m.l + cw * hr + cw / 2).attr('y', H - 6).attr('text-anchor', 'middle').text(pad(hr));
+    el.replaceChildren(svg.node());
+    // Weekend nights: trips per day from 1 to 4 am, weekends against weekdays.
+    let night = '';
+    if (days.status === 'ok' && days.data.length) {
+      const nDays = [0, 0]; for (const r of days.data) nDays[wd(r.day) >= 5 ? 1 : 0]++;
+      const sum = [0, 0]; for (const r of d.data) if (num(r.hour) >= 1 && num(r.hour) <= 3) sum[num(r.weekday) >= 5 ? 1 : 0] += num(r.trips);
+      if (nDays[0] && nDays[1] && sum[0]) {
+        const ratio = (sum[1] / nDays[1]) / (sum[0] / nDays[0]);
+        if (ratio >= 1.2) night = ` Weekend nights: 1 to 4 am is ${fmt.num(ratio, 1)}× busier on Saturday and Sunday than on a weekday.`;
+      }
+    }
+    note.textContent = `Busiest hour: ${DAY_NAMES[top.weekday]} ${hourLabel(top.hour)}, ${fmt.num(top.trips)} trips.${night}`;
+  }
+
+  // ---- Flows: pickup areas on the left, dropoff areas on the right, bands sized by trips
+  function drawFlows() {
+    const d = dash.data('flows');
+    if (!kit.ready('#ct-flow', d) || empty('#ct-flow', d.data)) return;
+    const el = document.getElementById('ct-flow');
+    const total = d3.sum(d.data, (r) => num(r.trips));
+    const sideTotals = (key) => d3.rollup(d.data, (g) => d3.sum(g, (r) => num(r.trips)), (r) => r[key]);
+    const keep = (key) => { const t = sideTotals(key); return (a) => (t.get(a) || 0) / total >= 0.01 ? a : 'Elsewhere'; };
+    const kf = keep('from_area'), kt = keep('to_area');
+    const links = d3.flatRollup(d.data, (g) => ({ trips: d3.sum(g, (r) => num(r.trips)), fares: d3.sum(g, (r) => num(r.fares)) }), (r) => kf(r.from_area), (r) => kt(r.to_area))
+      .map(([from, to, v]) => ({ from, to, ...v }));
+    const order = (side) => [...d3.rollup(links, (g) => d3.sum(g, (l) => l.trips), (l) => l[side])].sort((a, b) => (a[0] === 'Elsewhere') - (b[0] === 'Elsewhere') || b[1] - a[1]);
+    const left = order('from'), right = order('to');
+    const W = Math.max(320, el.clientWidth), H = 330, nodeW = 10, padY = 8, top = 22;
+    const labelW = Math.min(118, W * 0.27);
+    const x0 = labelW, x1 = W - labelW;
+    const avail = H - top - 6 - padY * (Math.max(left.length, right.length) - 1);
+    const k = avail / total;
+    const place = (list) => { let y = top; const pos = new Map(); for (const [a, n] of list) { const hgt = Math.max(2, n * k); pos.set(a, { y, h: hgt, n, used: 0 }); y += hgt + padY; } return pos; };
+    const L = place(left), R = place(right);
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart ct-flow').attr('role', 'img').attr('aria-label', 'Trips from each pickup area to each dropoff area');
+    svg.append('text').attr('class', 'ct-colhead').attr('x', x0).attr('y', 12).attr('text-anchor', 'start').text('Pickup');
+    svg.append('text').attr('class', 'ct-colhead').attr('x', x1 + nodeW).attr('y', 12).attr('text-anchor', 'end').text('Dropoff');
+    const tip = { show: (...a) => kit.tip(el).show(...a), hide: () => kit.tip(el).hide() };  // looked up after the redraw
+    const lefts = new Map(left.map(([a], i) => [a, i])), rights = new Map(right.map(([a], i) => [a, i]));
+    const sorted = links.slice().sort((a, b) => lefts.get(a.from) - lefts.get(b.from) || rights.get(a.to) - rights.get(b.to));
+    // Stack each band in its source in target order, and in its target in source order, so bands don't cross needlessly.
+    const inTarget = links.slice().sort((a, b) => rights.get(a.to) - rights.get(b.to) || lefts.get(a.from) - lefts.get(b.from));
+    const tOff = new Map();
+    for (const l of inTarget) { const r = R.get(l.to); tOff.set(l, r.y + r.used); r.used += l.trips * k; }
+    const g = svg.append('g');
+    for (const l of sorted) {
+      const s = L.get(l.from), hgt = l.trips * k;
+      const ya = s.y + s.used; s.used += hgt;
+      const yb = tOff.get(l);
+      const xa = x0 + nodeW, xb = x1, xm = (xa + xb) / 2;
+      const path = `M${xa},${ya}C${xm},${ya} ${xm},${yb} ${xb},${yb}L${xb},${yb + hgt}C${xm},${yb + hgt} ${xm},${ya + hgt} ${xa},${ya + hgt}Z`;
+      g.append('path').attr('class', 'ct-rib').attr('d', path).attr('fill', colourOf(l.from)).attr('opacity', 0.5)
+        .on('pointermove', (ev) => {
+          const [px, py] = d3.pointer(ev, svg.node()), sc = el.getBoundingClientRect().width / W;
+          tip.show(px * sc, py * sc, h('strong', null, `${l.from} → ${l.to}`), h('div', null, `${fmt.num(l.trips)} trips · ${fmt.pct(l.trips / total, 1)} of all`),
+            h('div', { class: 'kit-tip-note' }, `Average fare ${fmt.money(l.fares / l.trips, 2)}`));
+        })
+        .on('pointerleave', () => tip.hide());
+    }
+    const nodes = (pos, x, anchor, lx) => {
+      for (const [a, p] of pos) {
+        svg.append('rect').attr('x', x).attr('y', p.y).attr('width', nodeW).attr('height', p.h).attr('fill', colourOf(a));
+        if (p.h < 9 && a !== [...pos.keys()][0]) continue;
+        svg.append('text').attr('x', lx).attr('y', p.y + Math.min(p.h / 2, 14)).attr('dy', '0.35em').attr('text-anchor', anchor).text(a);
+        if (p.h >= 26) svg.append('text').attr('class', 'ct-n').attr('x', lx).attr('y', p.y + Math.min(p.h / 2, 14) + 15).attr('dy', '0.35em').attr('text-anchor', anchor).text(fmt.pct(p.n / total, 0));
+      }
+    };
+    nodes(L, x0, 'end', x0 - 6);
+    nodes(R, x1, 'start', x1 + nodeW + 6);
+    el.replaceChildren(svg.node());
+    const beyond = d.data.filter((r) => !(r.from_area === 'Manhattan' && r.to_area === 'Manhattan'))
+      .map((r) => ({ flow: `${r.from_area} → ${r.to_area}`, trips: num(r.trips), from: r.from_area }));
+    kit.bars('#ct-beyond', { rows: beyond, label: 'flow', value: 'trips', max: 6, fmt: (v) => `${fmt.num(v)} · ${fmt.pct(v / total, 1)}`, color: (r) => colourOf(r.from) });
+    const mm = links.find((l) => l.from === 'Manhattan' && l.to === 'Manhattan');
+    document.getElementById('ct-flow-title').textContent = mm && mm.trips / total >= 0.5
+      ? `${Math.round((mm.trips / total) * 100)}% of trips start and end in Manhattan` : 'Where trips go';
+  }
+
+  // ---- Airports: share of trips against share of fares, then each airport
+  function drawAirports() {
+    const d = dash.data('flows');
+    const note = document.getElementById('ct-air-note');
+    note.textContent = '';
+    if (!kit.ready('#ct-air', d) || empty('#ct-air', d.data)) return;
+    const isAir = (r) => AIRPORTS.includes(r.from_area) || AIRPORTS.includes(r.to_area);
+    const sum = (rows, k) => d3.sum(rows, (r) => num(r[k]));
+    const air = d.data.filter(isAir), city = d.data.filter((r) => !isAir(r));
+    const tAll = sum(d.data, 'trips'), fAll = sum(d.data, 'fares'), tAir = sum(air, 'trips'), fAir = sum(air, 'fares');
+    if (!tAir) { document.getElementById('ct-air').replaceChildren(h('div', { class: 'kit-state' }, 'No airport trips in these dates.')); return; }
+    const per = AIRPORTS.map((a) => { const rows = d.data.filter((r) => r.from_area === a || r.to_area === a); return { airport: a, trips: sum(rows, 'trips'), fares: sum(rows, 'fares') }; });
+    document.getElementById('ct-air-title').textContent = `Airport runs: ${fmt.pct(tAir / tAll, 0)} of trips, ${fmt.pct(fAir / fAll, 0)} of fares`;
+    const box = document.getElementById('ct-air');
+    const split = (label, share, of) => h('div', { class: 'ct-split-row' }, h('span', null, label),
+      h('span', { class: 'ct-split-track', title: `${fmt.pct(share, 1)} of ${of}` }, h('span', { class: 'ct-airport', style: `width:${(share * 100).toFixed(1)}%` })), h('b', null, fmt.pct(share, 1)));
+    const avgAir = fAir / tAir, avgCity = sum(city, 'fares') / sum(city, 'trips'), milesAir = sum(air, 'miles') / tAir, milesCity = sum(city, 'miles') / sum(city, 'trips');
+    box.replaceChildren(
+      h('div', { class: 'ct-split' }, split('Trips', tAir / tAll, 'trips'), split('Fares', fAir / fAll, 'fares')),
+      h('div', { class: 'ct-vs' },
+        h('div', null, h('strong', null, fmt.money(avgAir, 2)), h('span', null, `average airport fare · ${fmt.num(milesAir, 1)} mi`)),
+        h('div', null, h('strong', null, fmt.money(avgCity, 2)), h('span', null, `every other trip · ${fmt.num(milesCity, 1)} mi`)),
+        h('div', null, h('strong', null, `${fmt.num(avgAir / avgCity, 1)}×`), h('span', null, 'the fare of a city trip'))),
+      h('div', { id: 'ct-air-bars' }));
+    kit.bars('#ct-air-bars', { rows: per, label: 'airport', value: 'trips', fmt: (v) => `${fmt.num(v)} trips`, color: () => 'var(--signal-warn)' });
+    const jfk = per.find((p) => p.airport === 'JFK');
+    if (jfk && jfk.trips < tAir * 0.05) note.textContent = `JFK has only ${fmt.num(jfk.trips)} trips in this sample, far fewer than in real New York traffic. That is how the sample was built, not a finding about JFK.`;
+  }
+
+  // ---- ZIP codes, pickups or dropoffs
+  let zipDir = 'pickup';
+  for (const b of document.querySelectorAll('.ct-toggle .kit-btn')) b.addEventListener('click', () => {
+    zipDir = b.dataset.dir;
+    for (const x of document.querySelectorAll('.ct-toggle .kit-btn')) x.setAttribute('aria-pressed', String(x === b));
+    drawZips();
+  });
+  function drawZips() {
+    const d = dash.data('zips');
+    if (!kit.ready('#ct-zips', d)) return;
+    const rows = d.data.filter((r) => r.direction === zipDir).map((r) => ({ ...r, name: ZIP_NAMES[num(r.zip)] ? `${r.zip} · ${ZIP_NAMES[num(r.zip)]}` : String(r.zip) }));
+    if (!empty('#ct-zips', rows)) kit.bars('#ct-zips', { rows, label: 'name', value: 'trips', fmt: fmt.num, max: 10 });
+  }
+
+  // ---- Fare spread per distance band: a range bar per band
+  function drawBands() {
+    const d = dash.data('bands');
+    if (!kit.ready('#ct-bands', d) || empty('#ct-bands', d.data)) return;
+    const el = document.getElementById('ct-bands');
+    const rows = d.data.slice().sort((a, b) => num(a.band_order) - num(b.band_order));
+    const W = Math.max(300, el.clientWidth), row = 38, m = { t: 6, r: 16, b: 24, l: Math.min(150, W * 0.38) }, H = m.t + row * rows.length + m.b;
+    const x = d3.scaleLinear().domain([0, d3.max(rows, (r) => num(r.p90)) || 1]).nice().range([m.l, W - m.r]);
+    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart').attr('role', 'img').attr('aria-label', 'Fare percentiles by trip distance band');
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`)
+      .call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - m.l) / 70))).tickFormat((v) => fmt.money(v)).tickSize(-(H - m.t - m.b)))
+      .call((g) => g.select('.domain').remove());
+    const tip = { show: (...a) => kit.tip(el).show(...a), hide: () => kit.tip(el).hide() };  // looked up after the redraw
+    rows.forEach((r, i) => {
+      const y = m.t + row * i + row / 2;
+      const g = svg.append('g').style('cursor', 'default');
+      g.append('rect').attr('x', 0).attr('y', y - row / 2).attr('width', W).attr('height', row).attr('fill', 'transparent');
+      g.append('text').attr('x', m.l - 8).attr('y', y - 5).attr('text-anchor', 'end').text(r.band);
+      g.append('text').attr('x', m.l - 8).attr('y', y + 9).attr('text-anchor', 'end').text(`${fmt.num(r.trips)} trips`);
+      g.append('line').attr('x1', x(num(r.p10))).attr('x2', x(num(r.p90))).attr('y1', y).attr('y2', y).attr('stroke', 'var(--color-fg-muted)').attr('stroke-width', 1.5);
+      g.append('rect').attr('x', x(num(r.p25))).attr('width', Math.max(2, x(num(r.p75)) - x(num(r.p25)))).attr('y', y - 9).attr('height', 18)
+        .attr('fill', dash.colors[0]).attr('fill-opacity', 0.65);
+      g.append('line').attr('x1', x(num(r.median))).attr('x2', x(num(r.median))).attr('y1', y - 12).attr('y2', y + 12).attr('stroke', 'var(--color-fg)').attr('stroke-width', 2.5);
+      g.on('pointerenter', () => {
+        const sc = el.getBoundingClientRect().width / W;
+        tip.show(x(num(r.p75)) * sc, (y - 8) * sc, h('strong', null, `${r.band} · ${fmt.num(r.trips)} trips`),
+          h('div', null, `Median ${fmt.money(r.median, 2)}`), h('div', { class: 'kit-tip-note' }, `Middle half ${fmt.money(r.p25, 2)} to ${fmt.money(r.p75, 2)} · 10th to 90th ${fmt.money(r.p10, 2)} to ${fmt.money(r.p90, 2)}`));
+      }).on('pointerleave', () => tip.hide());
+    });
+    el.replaceChildren(svg.node());
+    const lo = num(rows[0].median), hi = num(rows[rows.length - 1].median);
+    if (lo > 0 && rows.length > 1) document.getElementById('ct-bands-title').textContent = `Fares by distance: a median ${fmt.money(lo, 2)} under a mile, ${fmt.money(hi, 2)} past ten`;
+  }
+
+  // ---- Day by day
+  function drawTable() {
+    const d = dash.data('daily');
+    if (!kit.ready('#ct-table', d) || empty('#ct-table', d.data)) return;
+    const b = baseline();
     const rows = d.data.map((r) => {
       const n = num(r.trips);
-      return { ...r, weekday: DAYS[(new Date(r.day + 'T00:00:00').getDay() + 6) % 7],
+      return { ...r, weekday: DAYS[wd(r.day)], vs_normal: b && b.devOf(r.day) !== null ? b.devOf(r.day).toFixed(3) : null,
         avg_fare: (num(r.fares) / n).toFixed(2), avg_miles: (num(r.miles) / n).toFixed(2), avg_minutes: (num(r.minutes) / n).toFixed(1) };
     });
     kit.table('#ct-table', { rows, csv: 'city-trips-by-day', sort: { key: 'day', dir: 'asc' }, columns: [
       { key: 'day', label: 'Date', fmt: fmt.date },
       { key: 'weekday', label: 'Day' },
       { key: 'trips', label: 'Trips', align: 'right', fmt: fmt.num },
+      { key: 'vs_normal', label: 'vs normal', align: 'right', fmt: (v) => (v === null || v === undefined ? fmt.text(null) : pct(num(v))) },
       { key: 'fares', label: 'Fares', align: 'right', fmt: fmt.money },
       { key: 'avg_fare', label: 'Avg fare', align: 'right', fmt: (v) => fmt.money(v, 2) },
       { key: 'avg_miles', label: 'Avg miles', align: 'right', fmt: (v) => fmt.num(v, 1) },
@@ -100,76 +582,10 @@
     ] });
   }
 
-  // Heatmap: weekday rows x hour columns, stronger colour = more trips. Drawn with d3, which the portal always loads.
-  function drawHeat() {
-    const d = dash.data('hours');
-    const note = document.getElementById('ct-heat-note');
-    note.textContent = '';
-    if (!kit.ready('#ct-heat', d) || empty('#ct-heat', d.data)) return;
-    const el = document.getElementById('ct-heat');
-    const count = new Map(d.data.map((r) => [`${r.weekday}-${r.hour}`, num(r.trips)]));
-    const max = Math.max(...count.values());
-    const W = Math.max(300, el.clientWidth), m = { t: 4, r: 4, b: 22, l: 34 };
-    const cw = (W - m.l - m.r) / 24, ch = Math.max(14, Math.min(26, cw * 1.2)), H = m.t + ch * 7 + m.b;
-    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart ct-heat')
-      .attr('role', 'img').attr('aria-label', 'Trips by weekday and hour of pickup');
-    DAYS.forEach((day, wd) => {
-      svg.append('text').attr('x', m.l - 6).attr('y', m.t + ch * wd + ch / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text(day);
-      for (let hr = 0; hr < 24; hr++) {
-        const n = count.get(`${wd}-${hr}`) || 0;
-        svg.append('rect').attr('x', m.l + cw * hr).attr('y', m.t + ch * wd).attr('width', cw).attr('height', ch)
-          .attr('fill', dash.colors[0]).attr('fill-opacity', 0.06 + 0.94 * (n / max))
-          .append('title').text(`${day} ${String(hr).padStart(2, '0')}:00 · ${fmt.num(n)} trips`);
-      }
-    });
-    for (let hr = 0; hr < 24; hr += 3) {
-      svg.append('text').attr('x', m.l + cw * hr + cw / 2).attr('y', H - 6).attr('text-anchor', 'middle').text(String(hr).padStart(2, '0'));
-    }
-    el.replaceChildren(svg.node());
-    const top = d.data.reduce((a, b) => (num(b.trips) > num(a.trips) ? b : a));
-    note.textContent = `Busiest hour: ${DAYS[top.weekday]} ${String(top.hour).padStart(2, '0')}:00, ${fmt.num(top.trips)} trips. Hover a square for its count.`;
-  }
-
-  function drawZips() {
-    const d = dash.data('zips');
-    for (const dir of ['pickup', 'dropoff']) {
-      const sel = `#ct-${dir}`;
-      if (!kit.ready(sel, d)) continue;
-      const rows = d.data.filter((r) => r.direction === dir);
-      if (!empty(sel, rows)) kit.bars(sel, { rows, label: 'zip', value: 'trips', fmt: fmt.num, max: 10 });
-    }
-  }
-
-  // Fare spread per distance band: a range bar per band (custom d3, in the same style as the kit charts).
-  function drawBands() {
-    const d = dash.data('bands');
-    if (!kit.ready('#ct-bands', d) || empty('#ct-bands', d.data)) return;
-    const el = document.getElementById('ct-bands');
-    const rows = d.data.slice().sort((a, b) => num(a.band_order) - num(b.band_order));
-    const W = Math.max(300, el.clientWidth), row = 34, m = { t: 6, r: 16, b: 24, l: Math.min(150, W * 0.38) }, H = m.t + row * rows.length + m.b;
-    const x = d3.scaleLinear().domain([0, d3.max(rows, (r) => num(r.p90)) || 1]).nice().range([m.l, W - m.r]);
-    const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart')
-      .attr('role', 'img').attr('aria-label', 'Fare percentiles by trip distance band');
-    svg.append('g').attr('transform', `translate(0,${H - m.b})`)
-      .call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - m.l) / 70))).tickFormat((v) => fmt.money(v)).tickSize(-(H - m.t - m.b)))
-      .call((g) => g.select('.domain').remove());
-    rows.forEach((r, i) => {
-      const y = m.t + row * i + row / 2;
-      const g = svg.append('g');
-      g.append('title').text(`${r.band}: ${fmt.num(r.trips)} trips. Median ${fmt.money(r.median, 2)}, middle half ${fmt.money(r.p25, 2)} to ${fmt.money(r.p75, 2)}`);
-      g.append('text').attr('x', m.l - 8).attr('y', y - 5).attr('text-anchor', 'end').text(r.band);
-      g.append('text').attr('x', m.l - 8).attr('y', y + 9).attr('text-anchor', 'end').text(`${fmt.num(r.trips)} trips`);
-      g.append('line').attr('x1', x(num(r.p10))).attr('x2', x(num(r.p90))).attr('y1', y).attr('y2', y)
-        .attr('stroke', 'var(--color-fg-muted)').attr('stroke-width', 1.5);
-      g.append('rect').attr('x', x(num(r.p25))).attr('width', Math.max(2, x(num(r.p75)) - x(num(r.p25))))
-        .attr('y', y - 8).attr('height', 16).attr('fill', dash.colors[0]).attr('fill-opacity', 0.55);
-      g.append('line').attr('x1', x(num(r.median))).attr('x2', x(num(r.median))).attr('y1', y - 11).attr('y2', y + 11)
-        .attr('stroke', 'var(--color-fg)').attr('stroke-width', 2.5);
-    });
-    el.replaceChildren(svg.node());
-  }
+  // What the page shows, for Ask Genie.
+  dash.genieContext(() => ({ 'Pickup dates': `${dash.params().date_from} to ${dash.params().date_to}`, 'ZIP codes shown': zipDir === 'pickup' ? 'Pickups' : 'Dropoffs' }));
 
   // Draw the whole page whenever any dataset changes (and on resize).
-  dash.onData(() => { drawDaily(); drawHeat(); drawZips(); drawBands(); });
+  dash.onData(() => { markPreset(); drawTop(); drawTrend(); drawStorm(); drawPace(); drawHeat(); drawFlows(); drawAirports(); drawZips(); drawBands(); drawTable(); });
 })();
 </script>

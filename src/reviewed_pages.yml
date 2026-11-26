@@ -1,13 +1,9 @@
 # Reviewed dashboard page code: SHA-256 of index.html (and of each assets/ file of an artifact page) as
 # UTF-8 text with LF line endings. Review the page before changing a digest. See decision 0018.
-artifact-demo: 52e53b8810e91201caa47aa32ee5b4c4b95a655fab46aa32e4905e971cb5ccfd
-artifact-demo/assets/charts.js: e360b2f9f813bd447d592fbaee8c943548d4417f88972b6243c147567348fdde
-artifact-demo/assets/theme.css: 412eea270a60f1fa48e8f448dca082eb61e336497933d838d7041ca8d8c5925d
 bakery-franchises: 10220faea746982df6c3c682c75b6f712b91bc6f3731c56762b7f10eb62f62ea
 city-trips: 79ba27fca46bfb19087e88fcd94268cde3d471e5fa9691f9e210d19de823ea71
 guest-experience: c209042c9c24cf68c678edd006a6c778c95ff9f5a8dc81fcbacf4e1e726c9d0f
 omnichannel-retail: 120bb24ed5d8754ca3407c3f5d4d15e2c3062f41f4c5da4e1caede4462cfa5d4
-sales-margin: 1713ef43f766f3d1f49c33cc98ad3361c534693c34a8ef255108cd1cb2fe4060
 travel-marketplace: 8413e93a021440b645378ce4fd1855743e5c64a82810abd2f8b8fe78ffcf69bf
 travel-operations: 632585766bd201786654db1eee0b9a7ee53e77c3879b978cb932968315f91b3a
 world-weather: 747882c911c42e66d6db281d79216ad343c51b00e5cedbb938fe37a2cb0846ad
