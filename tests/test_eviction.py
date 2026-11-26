@@ -139,6 +139,8 @@ def test_held_retries_when_prune_drops_the_lock_before_acquire(monkeypatch, cloc
 def hosts(monkeypatch):
     monkeypatch.delenv("PORTAL_ENV", raising=False)
     monkeypatch.delenv("DATABRICKS_HOST", raising=False)
+    for var in ("DATABRICKS_APP_NAME", "DATABRICKS_APP_URL", "DATABRICKS_APP_PORT"):
+        monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(settings, "ENVIRONMENTS", {"dev": {"host": "dev.example.net"}, "prod": {"host": "prod.example.net"}})
 
 
@@ -152,6 +154,21 @@ def test_no_host_and_no_portal_env_is_prod(hosts, monkeypatch):
     assert settings.current_env() == "prod"
     monkeypatch.setenv("DATABRICKS_HOST", "   ")
     assert settings.current_env() == "prod"
+
+
+@pytest.mark.parametrize("host", [None, "   "])
+def test_deployed_with_blank_host_raises(hosts, monkeypatch, host):
+    monkeypatch.setenv("DATABRICKS_APP_NAME", "lakeboard")
+    if host is not None:
+        monkeypatch.setenv("DATABRICKS_HOST", host)
+    with pytest.raises(ValueError, match="DATABRICKS_HOST is empty in a deployed app"):
+        settings.current_env()
+
+
+def test_portal_env_wins_when_deployed_with_blank_host(hosts, monkeypatch):
+    monkeypatch.setenv("DATABRICKS_APP_NAME", "lakeboard")
+    monkeypatch.setenv("PORTAL_ENV", "dev")
+    assert settings.current_env() == "dev"
 
 
 def test_portal_env_wins_over_unmatched_host(hosts, monkeypatch):
