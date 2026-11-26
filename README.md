@@ -6,9 +6,10 @@ LakeBoard is one Databricks App that hosts many dashboards. Each dashboard is a 
 `src/dashboards/`: a small manifest, a few SQL files and one HTML page. Folders are reviewed by pull request and
 deployed to dev, test and prod like any other code. That makes it a practical way to retire Power BI reports one
 folder at a time. Claude Code, Codex and other coding agents can write a whole dashboard against the same
-documented contract. Queries run as the person viewing the page, so Unity Catalog permissions, row filters and column
-masks apply as they are. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that
-answers questions with the viewer's own access.
+documented contract. Queries run as the person viewing the page. Per-viewer caching preserves Unity Catalog row
+filters and column masks; opt-in shared caching checks reader access and requires identical results for every
+permitted viewer. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that answers
+questions with the viewer's own access.
 
 ![City Trips in the running app's dark theme: KPI tiles, trips per day and a day-by-hour heatmap](docs/images/city-trips.jpg)
 
@@ -36,7 +37,7 @@ and reconcile an existing report. New dashboards can start directly from approve
 
 ## Quickstart (about 10 minutes)
 
-This runs the seven sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
+This runs the sample dashboards, which read only the built-in `samples` catalog. `samples` exists in most
 Unity Catalog workspaces (an admin can hide it). [Databricks Free Edition](https://www.databricks.com/learn/free-edition)
 works well: it has a serverless starter warehouse, Databricks Apps and the `samples` catalog.
 
@@ -45,6 +46,7 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
 | [City Trips](src/dashboards/city-trips/) | `samples.nyctaxi` | Taxi trips by day and hour, busy ZIP codes, fares by distance |
 | [Sales & Margin](src/dashboards/sales-margin/) | `samples.tpch` | Revenue, discount and margin, year on year |
 | [Bakery Franchises](src/dashboards/bakery-franchises/) | `samples.bakehouse` | Franchise sales, products and reviews, on a map |
+| [Travel Operations](src/dashboards/travel-operations/) | `samples.wanderbricks` | Executive overview, saved destinations, property drill-down, guest experience and TV view |
 | [Travel Marketplace](src/dashboards/travel-marketplace/) | `samples.wanderbricks` | Bookings, revenue and seasonality across 42 destinations, drilling down to each property on a map |
 | [Guest Experience](src/dashboards/guest-experience/) | `samples.wanderbricks` | Reviews and support chats: ratings, topics, how the guest's mood changes, agents |
 | [Omnichannel Retail](src/dashboards/omnichannel-retail/) | `samples.tpcds_sf1` | Store, catalog and web sales year on year, the holiday peak, hours, returns |
@@ -102,6 +104,10 @@ targets:
 and `src/environments.local.yml` sets the host the app uses to know it is dev:
 `environments: {dev: {host: <your-workspace-host>}}` (no https://).
 
+The GitHub Actions deploy does this for you: it writes both files from the `DATABRICKS_HOST` secret and the
+`DATABRICKS_WAREHOUSE_ID` variable of the GitHub environment, so a workspace never has to be committed
+([docs/PROMOTION.md](docs/PROMOTION.md)).
+
 **4. Add your own dashboard:**
 
 ```bash
@@ -149,14 +155,14 @@ the optional in-dashboard Ask Genie integration uses a curated Genie agent and i
   catalogs, and a check that runs on every pull request.
 - **Dev, test and prod from one branch flow.** SQL is written with prod catalog names and swapped per environment
   (`src/environments.yml`). Example pipelines for GitHub Actions and Azure DevOps.
-- **Caching that fits the data.** Per-viewer or shared results, a time-to-live per dataset, background warming at set
-  times, and datasets read as the app for people who have no access to the source.
+- **Caching that fits the data.** Per-viewer or shared results, reader access checks before shared results, a
+  time-to-live per dataset, startup-only or scheduled warming, and explicit app-auth datasets.
 - **Freshness label.** "Data as of 10:42 am" in the title bar, with a panel showing how each dataset is cached and
   whether the source tables have changed since (from Unity Catalog metadata).
 - **Ask Genie** about a dashboard, with the page's filters sent as context. Answers show the table and the SQL.
 - **A page kit** (`kit`): filters, KPI tiles, sortable tables with CSV and Excel export, bars, lines, maps, number
   formats. Light and dark themes from one block of CSS variables; the name, logo and locale are configuration.
-- **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites.
+- **Strict browser sandbox.** A Content-Security-Policy keeps pages from loading or sending anything to other sites. Pages can be framed by the app itself and by the workspace (`DATABRICKS_HOST`). Add further https origins, space- or comma-separated, in `FRAME_ANCESTORS` (each must be `https://host` or `https://host:port`, with no path or wildcard). A bad `DATABRICKS_HOST` or `FRAME_ANCESTORS` entry stops the app at start-up. `X-Frame-Options: SAMEORIGIN` is sent only when no other origin is allowed.
 - **Migration helpers.** A Power BI usage report (who views what) to plan the order of work, and a README template
   for recording how each dashboard reconciles with the report it replaces.
 - **Power BI projects to dashboards.** Point Claude Code at a Power BI project in git (PBIP): `scripts/pbip_summary.py`
@@ -173,6 +179,24 @@ the optional in-dashboard Ask Genie integration uses a curated Genie agent and i
 |---|---|---|
 | Migrate a Power BI report | Data team | Claude Code reads the Power BI project and writes the dashboard folder directly ([docs/MIGRATION.md](docs/MIGRATION.md)) |
 | Host a dashboard built in Claude | Business users, then the data team | Share the Claude dashboard; Claude Code imports it as a draft, wires its data to Unity Catalog and reconciles it ([docs/AUTHORING.md](docs/AUTHORING.md)) |
+
+## Travel Operations showcase
+
+[Travel Operations](src/dashboards/travel-operations/) brings the public Wanderbricks sample together as an
+operating view: executive overview, saved destinations, property drill-down and guest experience. Built by
+Doneel Maran, it demonstrates one dashboard folder with keyboard navigation, light/dark themes and a TV view.
+The 2025 sample is historical and partial; booked value is not recognized revenue.
+
+![Travel Operations: booking KPIs, a world destination map, booking-value trend and cancellation watch](docs/images/travel-operations-overview.png)
+
+<details>
+<summary>TV view and guest experience</summary>
+
+![Travel Operations TV view: a presentation layout with the current destination scope and an Escape exit](docs/images/travel-operations-tv.png)
+
+![Travel Operations Guest Experience: rating distribution, repeated review phrases and low-rating share by destination](docs/images/travel-operations-guests.png)
+
+</details>
 
 ## Data freshness
 
@@ -204,7 +228,7 @@ They are all good tools, and often the better choice.
   own compute, and every interaction reruns the script on the server. LakeBoard runs one app for all dashboards and
   draws in the browser.
 - **Evidence** builds static pages from Markdown and SQL, with the data captured at build time. LakeBoard queries live,
-  as each viewer, so row-level security and access changes apply immediately.
+  as each viewer when data is fetched. Cached results follow their configured TTL and access policy.
 
 The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them), and you own a small platform.
 
@@ -232,6 +256,7 @@ The cost of LakeBoard: pages are HTML and JavaScript (or an AI agent writes them
 | [docs/PROMOTION.md](docs/PROMOTION.md) | Moving a change through dev, test and prod |
 | [docs/MIGRATION.md](docs/MIGRATION.md) | Moving a report from Power BI, including who uses it today |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Access, restricting sections, cost, usage, troubleshooting |
+| [docs/board.md](docs/board.md) | Open work: branches, pull requests, owners and standing permissions |
 | [docs/decisions/](docs/decisions/README.md) | Decision records: why each feature and design choice was made, and its limits |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding tools (Claude Code, Codex, Cursor) working in this repo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Proposing a change to LakeBoard itself |

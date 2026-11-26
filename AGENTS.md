@@ -4,12 +4,10 @@ LakeBoard: one Databricks App hosting many dashboards under `src/dashboards/`.
 
 ## Read what the task needs, not everything
 
-- Adding or changing a dashboard: `docs/AUTHORING.md` (plus `docs/MIGRATION.md` when replacing a Power BI report).
-- Importing a Claude Dashboard artifact someone sent as a link: `.claude/skills/import-claude-dashboard/SKILL.md`.
-  Worked example: `src/dashboards/city-trips/`.
 - Adding or changing a dashboard: follow `docs/DASHBOARD_WORKFLOW.md`, the shared workflow for every coding
   agent. `docs/AUTHORING.md` defines the APIs; also read `docs/MIGRATION.md` when replacing a Power BI report.
   Worked example: `src/dashboards/city-trips/`. Business authors can start with `docs/BUSINESS_AUTHORS.md`.
+- Importing a Claude Dashboard artifact someone sent as a link: `.claude/skills/import-claude-dashboard/SKILL.md`.
 - Changing the platform (`src/app.py`, `src/portal/`, `src/static/`, `scripts/`, the pipelines, `databricks.yml`,
   `resources/`): `docs/DESIGN.md`, `docs/OPERATIONS.md`, and the related record in `docs/decisions/`.
 - Caching, refresh, deploys, grants, starting and stopping apps: `docs/OPERATIONS.md`.
@@ -63,5 +61,6 @@ skills and instruction files should link to the shared workflow rather than dupl
 | Run locally | `./scripts/run_local.sh <cli-profile> <warehouse-id> [dev\|test\|prod]` or `./scripts/run_local.ps1 -Profile <p> -Warehouse <id> [-Env prod]` |
 | Static checks | `python scripts/check.py --static; python -m pytest -q` |
 | Run every query (LIMIT 0) | `python scripts/check.py --env dev --profile <profile> --warehouse <id>` |
+| Record a data-team review (a person, after reading the page and shared SQL) | `python scripts/approve.py <slug> --write` |
 | Show app grants | `python scripts/grant_app_access.py --env <env> --profile <profile> --warehouse <id>` (prints; `--apply` is for a person) |
 | Power BI usage | `python scripts/powerbi_usage.py --days 28` |

@@ -16,10 +16,19 @@ Thanks for helping. Bug reports, docs fixes, new sample dashboards and framework
 3. Run the checks. They need no Databricks workspace:
 
    ```bash
-   python -m pip install -r src/requirements.txt pytest
+   python -m pip install -r src/requirements.txt fastapi uvicorn pytest httpx ruff
+   ruff check
    python -m pytest -q
    PORTAL_ENV=dev python -m pytest -q
    python scripts/check.py --static
+   ```
+
+   Optional browser smoke test (stubbed data, no workspace):
+
+   ```bash
+   python -m pip install -r src/requirements.txt fastapi uvicorn pytest httpx playwright
+   python -m playwright install --with-deps chromium
+   python -m pytest e2e -q
    ```
 
 4. If you changed a sample dashboard's SQL, run it against a workspace you own
@@ -34,6 +43,8 @@ to their own workspaces. Contributions to this repo go straight to `main`.
 
 - **One change.** Two unrelated fixes are two pull requests.
 - **Tests** for new behaviour, in `tests/`. Tests must pass in any environment (see [AGENTS.md](AGENTS.md)).
+- **Reviews recorded** for a new or changed sample page or `cache: shared` SQL: `python scripts/approve.py <slug>
+  --write` updates `src/reviewed_pages.yml` and `src/shared_cache.yml` (see [docs/AUTHORING.md](docs/AUTHORING.md)).
 - **A decision record** in [docs/decisions/](docs/decisions/README.md) for a design change: what, why, the
   alternatives, and the limits.
 - **No company data.** Sample dashboards read only the built-in `samples` catalog. Never commit workspace hosts,

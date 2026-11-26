@@ -48,3 +48,5 @@ every workspace):
 | `hours` | 168 | Trips add up to 21,932; busiest slot Thursday 18:00 (230 trips) |
 | `zips` | 20 | 10 pickup and 10 dropoff; 10001 is busiest both ways (1,227 pickups, 1,069 dropoffs) |
 | `bands` | 5 | Trips add up to 21,932; median fare rises from $5.00 (under 1 mi) to $43.50 (10 mi or more) |
+
+Default warmed datasets use `warm_at: startup`: once per process, in configured warm environments. Expiry and manual Refresh still run queries.

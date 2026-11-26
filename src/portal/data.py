@@ -7,6 +7,9 @@ import logging
 import os
 import threading
 import time
+from contextlib import contextmanager
+from datetime import date
+from uuid import uuid4
 
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import Disposition, Format, StatementParameterListItem, StatementState
@@ -26,12 +29,29 @@ _locks_guard = threading.Lock()
 
 
 class QueryError(Exception):
-    pass
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(message)
+        self.code = code
 
 
 def _lock(key: str) -> threading.Lock:
     with _locks_guard:
         return _locks.setdefault(key, threading.Lock())
+
+
+@contextmanager
+def _held(key: str):
+    while True:
+        lock = _lock(key)
+        lock.acquire()
+        with _locks_guard:
+            if _locks.get(key) is lock:
+                break
+        lock.release()  # prune() dropped it before we acquired; retry with the registered lock
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def bind(dashboard: Dashboard, ds: Dataset, raw: dict) -> list[StatementParameterListItem]:
@@ -45,31 +65,43 @@ def bind(dashboard: Dashboard, ds: Dataset, raw: dict) -> list[StatementParamete
     return items
 
 
-def run_sql(client: WorkspaceClient, sql: str, params: list[StatementParameterListItem]) -> dict:
+def run_sql(client: WorkspaceClient, sql: str, params: list[StatementParameterListItem], *, dataset: str = "") -> dict:
     if not WAREHOUSE_ID:
         raise QueryError("DATABRICKS_WAREHOUSE_ID is not set")
-    r = client.statement_execution.execute_statement(
-        statement=sql, warehouse_id=WAREHOUSE_ID, parameters=params or None, wait_timeout="30s",
-        disposition=Disposition.INLINE, format=Format.JSON_ARRAY, on_wait_timeout=None,
-    )
-    deadline = time.time() + QUERY_TIMEOUT
-    while r.status.state in (StatementState.PENDING, StatementState.RUNNING):
-        if time.time() > deadline:
-            client.statement_execution.cancel_execution(r.statement_id)
-            raise QueryError(f"Query took longer than {QUERY_TIMEOUT // 60} minutes and was stopped")
-        time.sleep(2)
-        r = client.statement_execution.get_statement(r.statement_id)
-    if r.status.state != StatementState.SUCCEEDED:
-        msg = r.status.error.message if r.status.error else str(r.status.state)
-        raise QueryError(msg)
-    columns = [c.name for c in r.manifest.schema.columns]
-    rows = list((r.result and r.result.data_array) or [])
-    chunk = r.result
-    while chunk is not None and chunk.next_chunk_index is not None and len(rows) < MAX_ROWS:
-        chunk = client.statement_execution.get_statement_result_chunk_n(r.statement_id, chunk.next_chunk_index)
-        rows.extend(chunk.data_array or [])
-    cut = len(rows) > MAX_ROWS or bool(r.manifest.truncated)
-    return {"columns": columns, "rows": rows[:MAX_ROWS], "cut": cut}
+    started = time.monotonic()
+    statement_id = None
+    outcome = "failed"
+    try:
+        r = client.statement_execution.execute_statement(
+            statement=sql, warehouse_id=WAREHOUSE_ID, parameters=params or None, wait_timeout="30s",
+            disposition=Disposition.INLINE, format=Format.JSON_ARRAY, on_wait_timeout=None,
+        )
+        statement_id = r.statement_id
+        deadline = time.monotonic() + QUERY_TIMEOUT
+        while r.status.state in (StatementState.PENDING, StatementState.RUNNING):
+            if time.monotonic() > deadline:
+                outcome = "timed_out"
+                client.statement_execution.cancel_execution(statement_id)
+                raise QueryError(f"Query took longer than {QUERY_TIMEOUT // 60} minutes and was stopped")
+            time.sleep(2)
+            r = client.statement_execution.get_statement(statement_id)
+        if r.status.state != StatementState.SUCCEEDED:
+            msg = r.status.error.message if r.status.error else str(r.status.state)
+            code = getattr(r.status.error, "error_code", "") if r.status.error else ""
+            raise QueryError(msg, getattr(code, "value", code))
+        columns = [c.name for c in r.manifest.schema.columns]
+        rows = list((r.result and r.result.data_array) or [])
+        chunk = r.result
+        while chunk is not None and chunk.next_chunk_index is not None and len(rows) < MAX_ROWS:
+            chunk = client.statement_execution.get_statement_result_chunk_n(statement_id, chunk.next_chunk_index)
+            rows.extend(chunk.data_array or [])
+        cut = len(rows) > MAX_ROWS or bool(r.manifest.truncated)
+        outcome = "succeeded"
+        return {"columns": columns, "rows": rows[:MAX_ROWS], "cut": cut}
+    finally:
+        if dataset:
+            log.info("dataset_query dataset=%s statement_id=%s elapsed_ms=%.0f outcome=%s",
+                     dataset, statement_id or "unavailable", (time.monotonic() - started) * 1000, outcome)
 
 
 def cache_key(dashboard: Dashboard, ds: Dataset, who: str, params: list[StatementParameterListItem]) -> str:
@@ -84,23 +116,43 @@ def fetch(dashboard: Dashboard, ds: Dataset, client: WorkspaceClient, who: str, 
     hit = _cache.get(key)
     if hit and not refresh and hit[0] > time.time():
         return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
-    with _lock(key):  # one query per key at a time; others wait and reuse it
+    with _held(key):  # one query per key at a time; others wait and reuse it
         hit = _cache.get(key)
         if hit and not refresh and hit[0] > time.time():
             return {**hit[2], "fetched_at": hit[1], "expires_at": hit[0], "cached": True}
-        t0 = time.time()
-        payload = run_sql(client, ds.sql, params)
-        log.info("ran %s/%s for %s: %d rows in %.1fs", dashboard.slug, ds.id, who if who in ("app", "shared") else "user",
-                 len(payload["rows"]), time.time() - t0)
+        query_started_at = time.time()
+        payload = {**run_sql(client, ds.sql, params, dataset=f"{dashboard.slug}/{ds.id}"),
+                   "query_started_at": query_started_at}
         now = time.time()
+        # A fresh validator per result: fetched_at can repeat within one clock tick (about 15 ms on Windows), and a
+        # repeated ETag would let a client keep a superseded result after a refresh replaced it.
+        payload = {**payload, "etag": uuid4().hex}
         _cache[key] = (now + ds.cache_ttl, now, payload)
         return {**payload, "fetched_at": now, "expires_at": now + ds.cache_ttl, "cached": False}
 
 
 def prune() -> None:
     now = time.time()
-    for k in [k for k, v in _cache.items() if v[0] < now - 3600]:
-        _cache.pop(k, None)
+    for k, v in list(_cache.items()):  # a snapshot: worker threads insert while this runs
+        if v[0] < now - 3600:
+            _cache.pop(k, None)
+    with _locks_guard:  # never a lock whose key is cached or mid-fetch, or fetch() could run one key twice
+        for k in [k for k, lock in _locks.items() if k not in _cache and not lock.locked()]:
+            del _locks[k]
+
+
+def data_through(ds: Dataset, payload: dict) -> str | None:
+    """Latest valid event date actually returned, separate from when the query was fetched."""
+    if not ds.data_through or ds.data_through not in payload.get("columns", []):
+        return None
+    index = payload["columns"].index(ds.data_through)
+    days = []
+    for row in payload.get("rows", []):
+        try:
+            days.append(date.fromisoformat(str(row[index])).isoformat())
+        except (ValueError, IndexError, TypeError):
+            continue
+    return max(days) if days else None
 
 
 def _warm_slot() -> str | None:
@@ -124,7 +176,10 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
     scheduled = WARM_ENABLED and env in WARM.get("environments", [])
     started, last_slot = False, _warm_slot()
     while True:
-        prune()
+        try:
+            prune()
+        except Exception:  # a failed prune must not end warming
+            log.exception("prune failed")
         for d in dashboards.values():
             for ds in d.datasets.values():
                 key = f"{d.slug}/{ds.id}"
@@ -137,10 +192,13 @@ async def warm_datasets(dashboards: dict[str, Dashboard], app_client_factory, en
                     log.warning("warm %s failed: %s", key, e)
                     next_run[key] = time.time() + 900
         slot = _warm_slot()
-        if scheduled and (not started or (slot and slot != last_slot)):  # once at start-up, then at each scheduled time
+        if scheduled and (not started or (slot and slot != last_slot)):
+            startup = not started
             started, last_slot = True, slot
             for d in dashboards.values():
                 for ds in d.datasets.values():
+                    if ds.warm_at == "startup" and not startup:
+                        continue
                     for entry in [] if ds.todo else ds.warm:
                         try:
                             await asyncio.to_thread(fetch, d, ds, app_client_factory(), "shared", entry, True)

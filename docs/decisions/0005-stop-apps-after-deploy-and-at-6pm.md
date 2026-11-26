@@ -1,16 +1,19 @@
-# 0005. Dev and test apps stopped after every deploy; prod stopped in the evening
+# 0005. Test app stopped after every deploy; GitHub Actions leaves dev running; prod stopped in the evening
 
 - **Status:** Accepted
 
 ## Context
-A Databricks App bills while it runs. Dev and test are used only when someone is testing. Prod is used in business
-hours.
+A Databricks App bills while it runs: compute is charged for as long as the app is up. Test is used only when
+someone is testing. GitHub Actions leaves `lakeboard-dev` running after a `develop` deploy, so that cost continues
+until someone stops the app. Prod is used in business hours.
 
 ## Decision
-- **Dev and test:** the deploy pipeline starts the app with the new code, then stops it again. The stop step always
-  runs (`if: always()` in `.github/workflows/deploy.yml`, `condition: always()` in `pipelines/deploy-steps.yml`), so
-  a failed start does not leave compute running. It retries five times, 20 seconds apart, and fails the run if the
-  app still won't stop. A manual run with "keep running" skips it.
+- **GitHub Actions, dev:** after a `develop` deploy the pipeline starts `lakeboard-dev` and leaves it running. App
+  compute bills while it runs.
+- **Test (and Azure DevOps dev):** the deploy pipeline starts the app with the new code, then stops it again. The
+  stop step always runs (`if: always()` in `.github/workflows/deploy.yml`, `condition: always()` in
+  `pipelines/deploy-steps.yml`), so a failed start does not leave compute running. It retries five times, 20 seconds
+  apart, and fails the run if the app still won't stop. A manual run with "keep running" skips it.
 - The stop step passes `-t <target>`. Inside the bundle folder the CLI uses the bundle's default target (dev) for
   non-bundle commands, so without it a test deploy looks for the test app in the dev workspace, fails, and leaves
   test running.
@@ -19,14 +22,17 @@ hours.
   `CAN_MANAGE` on the app. The job is not part of this repository; create it in the prod workspace.
 
 ## Why
-- Dev and test cost nothing between tests.
+- Test (and Azure DevOps dev) cost nothing between tests.
+- GitHub Actions leaves `lakeboard-dev` running so the latest `develop` deploy can be opened without starting the
+  app by hand; that compute bills while it runs.
 - Prod costs nothing overnight, when nobody uses it.
 
 ## Limitations
 - Nothing starts prod in the morning. The first person to open the portal starts the app and waits, and warming
   (see 0003) only runs once it is up.
-- Anyone testing in dev or test must start the app themselves
-  (`databricks -p <your-profile> apps start lakeboard-dev`), and it stays up until stopped or the next deploy.
+- After a GitHub Actions `develop` deploy, `lakeboard-dev` is already running. Anyone testing in test (or in Azure
+  DevOps dev) must start the app themselves (`databricks -p <your-profile> apps start lakeboard-dev` or
+  `lakeboard-test`), and it stays up until stopped or the next deploy.
 - Stopping empties the in-memory cache.
 - The evening stop is outside the repository, so it is easy to forget when the app is renamed.
 
@@ -61,12 +67,13 @@ waiting run, which is only right when every run contains all earlier changes, an
 For GitHub Actions, `cancel-in-progress: true` is rejected for the same reason.
 
 ## Alternatives considered
-- **Leave every app running.** Simplest, but bills all day in three workspaces.
+- **Leave every app running.** Simplest, but bills all day in three workspaces. GitHub Actions now does this for
+  `lakeboard-dev` only.
 - **Stop dev and test on a schedule, as in prod.** They would run from each deploy until the evening, when
   usually nobody is testing.
 
 ## Changing it later
-The dev/test stop step is in `.github/workflows/deploy.yml` and `pipelines/deploy-steps.yml`; the "keep running"
+The test (and Azure DevOps dev) stop step is in `.github/workflows/deploy.yml` and `pipelines/deploy-steps.yml`; the "keep running"
 inputs are in the workflow's `workflow_dispatch` inputs and in `azure-pipelines.yml`. The prod schedule lives in
 the job you create in the prod workspace. A morning start would be a second scheduled job.
 

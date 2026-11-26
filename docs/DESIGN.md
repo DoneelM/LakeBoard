@@ -109,6 +109,7 @@ switched on), `libs` (extra libraries such as Leaflet), `replaces`, `genie`, and
 - Every table is `catalog.schema.table`, in a catalog listed in `src/environments.yml`.
 - Pages may not load scripts from other sites.
 - `section`, `environments` and `libs` must use values from `src/environments.yml`.
+- `group`, if set, is text of 40 characters at most with no leading or trailing spaces.
 - `page` is `lakeboard` or `artifact`; `assets/` (artifact pages only) holds flat `.js`, `.css`, image and font
   files; `status` is `live` or `draft`; `snapshot` needs `todo: true` and a `snapshots/<name>.json` path.
 - A `genie:` block names a 32-character space id per known environment, and is refused alongside `auth: app` data.
@@ -134,7 +135,9 @@ Databricks Free Edition workspace works for trying it out (serverless starter wa
 ## Navigation and brand
 
 The shell puts a fixed pane on the left, like a Power BI app: the logo and portal name, then each section with
-its dashboards in `order`. It lists only what the signed-in person may open. It collapses with the ☰ button
+its dashboards in `order`. It lists only what the signed-in person may open. Dashboards in a section that share a
+`group:` sit under one collapsible sub-menu, placed where its first dashboard would be and expanded by default
+([decision 0017](decisions/0017-navigation-sub-menus.md)). It collapses with the ☰ button
 (remembered per browser) and becomes a slide-over on narrow screens. Sections and their order are set in
 `src/environments.yml`.
 
@@ -151,7 +154,7 @@ same logo with `{{LOGO}}`. `locale:` sets how numbers and dates are written.
 | What data a user sees | `auth: user` (default): the query runs with the user's token, so UC grants, row filters and masks apply |
 | Cache isolation | `auth: user` results are cached **per user**; `auth: app` results are shared, so only use it for data every viewer of that dashboard may see |
 | Part of a dashboard | `groups` on a dataset; the server refuses it to anyone else ([OPERATIONS.md](OPERATIONS.md)) |
-| What a page can do | A Content-Security-Policy lets the browser load scripts and data only from the portal (plus Google Fonts and OpenStreetMap tiles), so a page can't send data elsewhere |
+| What a page can do | A Content-Security-Policy lets the browser load scripts and data only from the portal (fonts are served by the portal itself: Inter, SIL OFL, `src/static/fonts/`; only OpenStreetMap tiles are allowed from elsewhere), so a page can't send data elsewhere. Framing defaults to the portal and the workspace (`frame-ancestors` is `'self'` plus `https://` and the host from `DATABRICKS_HOST`); more https origins can be listed in `FRAME_ANCESTORS`. A bad `DATABRICKS_HOST` or `FRAME_ANCESTORS` entry stops the app at start-up. `X-Frame-Options: SAMEORIGIN` is sent only when the list is just `'self'` |
 | What SQL can read | Read-only statements, and only catalogs on the allow-list |
 | Runaway queries | Stopped after 10 minutes; results capped at 500,000 rows |
 | Ask Genie | Always called with the viewer's token, after the same dashboard `groups` check; not offered on dashboards with `auth: app` data. Questions and answers are shown as text only |
@@ -162,12 +165,18 @@ views. The portal then enforces it automatically, for every dashboard and for Ge
 
 ## Caching and cost
 - **Cache key:** dashboard, dataset, bound parameters, and the user (or `app`). The TTL comes from the manifest.
-- **Refresh:** the page's Refresh button sends `?refresh=1` to bypass the cache for that user.
+- **Refresh:** Refresh data checks source metadata in one batch for loaded datasets, comparing the timestamps
+  with when each query began. Changed or unverifiable inputs send `?refresh=1`. Unchanged inputs revalidate
+  the same result through the usual access and TTL checks, with a body-free 304 on a matching cache hit.
+  Refresh all bypasses the result cache for every loaded dataset.
+- **Query profiling:** application logs record the Databricks statement ID, outcome and app-side elapsed time
+  for every dataset execution, including background warming. Use the ID to open the query profile.
 - **Background warming:** `auth: app` datasets are re-run every `cache_ttl`, so slow sources (for example a
   federated table that takes minutes to scan) never block a reader. Shared datasets with a `warm:` list are
   refreshed at the `warm.times` in `src/environments.yml`.
 - **Warehouse use:** about one query per dataset per user per TTL. Filtering costs nothing.
-- **App use:** one always-on app per environment. Dev and test are stopped after each deploy; prod can be stopped
+- **App use:** one always-on app per environment. In GitHub Actions dev (`develop`) and prod stay running and test is stopped
+  after each deploy; the Azure DevOps pipeline still stops dev and test. Prod can be stopped
   out of hours (`databricks apps stop`) if usage allows (decision 0005).
 
 ## Freshness label
@@ -263,14 +272,20 @@ with your CLI profile and warehouse, pass `scripts/check.py` and `pytest`, then 
 
 ## Deployment
 Two example pipelines do the same thing; use whichever matches your git host.
-- **Every PR:** `scripts/check.py --static` and `pytest` (Azure DevOps also runs `databricks bundle validate`).
-- **Push to `develop` / `release` / `main`:** run every dataset with `LIMIT 0` against that environment's
-  catalogs, build the source map, `databricks bundle deploy`, then `databricks bundle run portal`. Dev and test are
-  stopped afterwards. Deploys to one environment run one at a time.
+- **Every PR:** `scripts/check.py --static` and `pytest`, with no workspace credentials. These include the page
+  and shared-SQL reviews (`src/reviewed_pages.yml`, `src/shared_cache.yml`; decision 0018).
+- **Push to `develop` / `release` / `main`:** install a pinned, checksum-verified Databricks CLI,
+  `databricks bundle validate`, run every dataset with `LIMIT 0` against that environment's
+  catalogs, build the source map, `databricks bundle deploy` (through `scripts/deploy_bundle.sh`, which binds an
+  app that already exists, decision 0020), then `databricks bundle run portal`. Test is
+  stopped afterwards (GitHub Actions; Azure DevOps also stops dev). Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a
-  `DATABRICKS_HOST` variable and a service principal's OAuth secret (`DATABRICKS_CLIENT_ID`,
-  `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the secret. A `concurrency` group per environment. An environment
-  with no `DATABRICKS_HOST` skips its deploy with a notice, so a fresh fork's pushes don't fail.
+  `DATABRICKS_HOST` secret (masked in the logs, with its bare host form), a `DATABRICKS_WAREHOUSE_ID` variable and a
+  service principal's OAuth secret (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`), or GitHub OIDC instead of the
+  secret. The deploy writes the gitignored `databricks.local.yml` and `src/environments.local.yml` from the host and
+  warehouse id (decision 0010). A `concurrency` group per environment. On `DoneelM/LakeBoard`,
+  an environment missing any of the four values fails the job on `main`/`release`/`develop`, naming the keys; forks and unconfigured copies
+  skip the deploy and write a "nothing deployed" job summary, so a fresh fork's pushes don't fail.
 - **Azure DevOps** (`azure-pipelines.yml`): the `databricks-service-connection` service connection (a placeholder);
   hosts come from the `lakeboard-<env>-vars` variable groups. `lockBehavior: sequential` per stage.
 - **Apps:** `lakeboard` (prod), `lakeboard-test`, `lakeboard-dev`.
@@ -296,3 +311,12 @@ reports. The Power BI activity log shows how each report is consumed, which tell
 - Unity Catalog metric views for shared measures, so dashboards built by different teams use one definition.
 - Pre-built tables for slow sources, so a page loads in seconds instead of waiting on a scan or a federated query.
 - A usage table in Unity Catalog (`usage_table:`, off by default) for adoption reporting beyond the app log.
+
+
+## Reliability additions (decision 0013)
+
+Before accessing shared user-auth results, `portal/access.py` checks the full parameterized query as the reader
+with LIMIT 0, caching short-lived permission decisions independently of result TTL. Failures never fall through
+to shared rows. Row filters and masks still require per-viewer results. `warm_at: startup` avoids scheduled warm
+runs for fixed data. The freshness panel groups changed sources and can show a dataset's actual returned event
+coverage (`data_through`) separately from its fetch time.

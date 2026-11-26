@@ -1,4 +1,4 @@
-# 0011. Agent-independent dashboard authoring
+# 0012. Agent-independent dashboard authoring
 
 - **Status:** In progress
 
@@ -22,10 +22,18 @@ the data team.
 - Keep agent-specific entry points thin. Authors whose tools do not discover repository rules can explicitly
   provide the same shared instructions and example.
 
+- Every hosted number comes from a SQL file in the dashboard folder. A page never asks Genie for its numbers, and a
+  prototype (for example a Claude Dashboard artifact) keeps the SQL from Genie's "Show code" for each dataset.
+  `docs/BUSINESS_AUTHORS.md` gives business authors the repository route step by step (setup, branch, scaffold,
+  local run, checks, reconciliation, pull request on GitHub or Azure DevOps) and says what the data team checks.
+  Both pull request templates ask for it.
+
 ## Why
 
 One maintained workflow reduces drift between tools. The data team reviews the same folder and evidence
 regardless of which agent wrote it. Business authors do not need their own application or deployment access.
+An artifact that refreshed through natural-language Genie questions had no SQL written down; hosting it meant
+rebuilding every query and reconciling it week by week. Keeping the SQL from the start avoids that rework.
 
 ## Limitations
 

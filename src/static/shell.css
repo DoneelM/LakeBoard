@@ -1,3 +1,4 @@
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400 800; font-display: swap; src: url('/static/fonts/inter-latin.woff2') format('woff2'); }
 /* Theme: every colour the portal, the page kit and Ask Genie use is set here, once, as CSS custom properties.
  * To rebrand, change the values in this block (and in the dark-mode block below). Pages use the same variables. */
 :root {

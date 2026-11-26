@@ -71,17 +71,90 @@ def is_local_run(environ=None) -> bool:
     return bool(environ.get("PORTAL_LOCAL_PROFILE")) and not is_deployed(environ)
 
 
+def normalise_host(value: str | None = None, environ=None) -> str:
+    """Workspace host, lowercased, with any leading http(s):// and trailing slashes removed."""
+    if value is None:
+        environ = os.environ if environ is None else environ
+        value = environ.get("DATABRICKS_HOST", "")
+    return re.sub(r"^https?://|/+$", "", (value or "").strip().lower())
+
+
+# Letters, digits, dots, hyphens, or a bracketed IPv6, with an optional numeric port. Rejects ; @ / ? # % and space.
+_STRICT_AUTHORITY = re.compile(r"^(?:[a-z0-9.-]+|\[[0-9a-f:]+\])(?::[0-9]+)?$")
+
+
+def _https_origin(value: str, label: str = "FRAME_ANCESTORS entry") -> str:
+    """https://host or https://host:port, or https://[ipv6][:port], with no path, userinfo, query, fragment or wildcard."""
+    from urllib.parse import urlparse
+    err = (
+        f"{label} {value!r} must be an https origin (https://host or https://host:port), with no path or wildcard"
+    )
+    if "*" in value or re.search(r"[\s;%]", value):
+        # urlparse strips CR/LF out of the netloc, which would otherwise join two hosts into one.
+        raise ValueError(err)
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.path
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+        or not parsed.hostname
+    ):
+        raise ValueError(err)
+    host = parsed.hostname  # already lowercased; IPv6 without brackets
+    authority = f"[{host}]" if ":" in host else host
+    if parsed.port:
+        authority = f"{authority}:{parsed.port}"
+    if not _STRICT_AUTHORITY.fullmatch(parsed.netloc.lower()) or not _STRICT_AUTHORITY.fullmatch(authority):
+        raise ValueError(err)
+    return f"https://{authority}"
+
+
+def frame_ancestors(environ=None) -> list[str]:
+    """'self', then https://DATABRICKS_HOST if set, then FRAME_ANCESTORS. Raises on a bad entry."""
+    environ = os.environ if environ is None else environ
+    origins = ["'self'"]
+    host = normalise_host(environ=environ)
+    if host:
+        origins.append(_https_origin(f"https://{host}", label="DATABRICKS_HOST"))
+    raw = (environ.get("FRAME_ANCESTORS") or "").strip()
+    if raw:
+        for entry in re.split(r"[,\s]+", raw):
+            if not entry:
+                continue
+            origin = _https_origin(entry)
+            if origin not in origins:
+                origins.append(origin)
+    return origins
+
+
+def x_frame_options(ancestors: list[str] | None = None, environ=None) -> str | None:
+    """SAMEORIGIN only when the app may not be framed by any other origin."""
+    if ancestors is None:
+        ancestors = frame_ancestors(environ)
+    return "SAMEORIGIN" if ancestors == ["'self'"] else None
+
+
 def current_env() -> str:
-    """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST, else prod."""
+    """PORTAL_ENV if set, else the environment whose host matches DATABRICKS_HOST. Prod only when both are unset
+    on a local run; a host that matches nothing raises, and so does a blank host in a deployed app."""
     env = os.getenv("PORTAL_ENV", "").strip().lower()
     if env:
         if env not in ENVIRONMENTS:
             raise ValueError(f"PORTAL_ENV={env!r} is not one of {sorted(ENVIRONMENTS)}")
         return env
-    host = re.sub(r"^https?://|/+$", "", os.getenv("DATABRICKS_HOST", "").strip().lower())
+    host = normalise_host()
     for name, spec in ENVIRONMENTS.items():
         if host and host == spec["host"]:
             return name
+    if host:
+        raise ValueError(f"DATABRICKS_HOST={host!r} matches no host in src/environments.yml; fix the host or set PORTAL_ENV")
+    if is_deployed():
+        raise ValueError("DATABRICKS_HOST is empty in a deployed app; set it or PORTAL_ENV")
     return "prod"
 
 

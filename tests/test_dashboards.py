@@ -89,7 +89,8 @@ def test_shared_cache_serves_every_viewer_from_one_query(make_dashboard, monkeyp
     board = load_dashboard(make_dashboard("store-visits", STORE_VISITS, {"points": POINTS_SQL}))
     assert board.errors == []
     points, calls = board.datasets["points"], []
-    monkeypatch.setattr(data, "run_sql", lambda client, sql, params: calls.append(params) or {"columns": ["n"], "rows": [["1"]], "cut": False})
+    monkeypatch.setattr(data, "run_sql", lambda client, sql, params, **kw: calls.append(params) or
+                        {"columns": ["n"], "rows": [["1"]], "cut": False})
     monkeypatch.setattr(data, "_cache", {})
     assert points.shared and points.warm
     first = data.fetch(board, points, None, "shared", {"region": "East"})
@@ -142,10 +143,18 @@ def test_usage_rows_are_batched_with_bound_values(monkeypatch):
 
     monkeypatch.setattr(usage, "USAGE_TABLES", {"prod": "main.governance.lakeboard_usage"})
     usage._insert(Client, "wh", "main.governance.lakeboard_usage",
-                  [("2026-11-10 01:00:00", "view", "prod", "city-trips", "someone@example.com"), ("2026-11-10 01:00:05", "home", "prod", None, "b'; DROP TABLE x --")])
+                  [("2026-11-10 01:00:00", "view", "prod", "city-trips", "someone@example.com"), ("2026-11-10 01:00:05", "home", "prod", None, "o'neill@example.com")])
     call = Client.statement_execution.calls[0]
-    assert call["statement"].count("(:event_time") == 2 and "DROP" not in call["statement"]
-    assert len(call["parameters"]) == 10
+    assert call["statement"].startswith("INSERT INTO IDENTIFIER(:usage_table)")
+    assert call["statement"].count("(:event_time") == 2
+    assert "main.governance.lakeboard_usage" not in call["statement"] and "o'neill" not in call["statement"]
+    params = {p.name: p for p in call["parameters"]}
+    assert len(params) == 11
+    assert (params["usage_table"].type, params["usage_table"].value) == ("STRING", "main.governance.lakeboard_usage")
+    assert params["user_email1"].value == "o'neill@example.com" and params["dashboard1"].value is None
+    with pytest.raises(ValueError):
+        usage._insert(Client, "wh", "main.governance.lakeboard_usage\n", [])
+    assert len(Client.statement_execution.calls) == 1
     assert usage.table_for("prod") == "main.governance.lakeboard_usage" and usage.table_for("dev") is None
     monkeypatch.setattr(usage, "USAGE_TABLES", {"prod": "not a table"})
     with pytest.raises(ValueError):
@@ -223,6 +232,125 @@ def test_health_endpoints(client, path):
     res = client.get(path)
     assert res.status_code == 200
     assert res.json()["ok"] is True
+
+
+def test_csp_frames_self_and_fonts_are_self_hosted(client):
+    import app as portal_app
+    res = client.get("/healthz")
+    csp = res.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self'" in csp
+    assert "font-src 'self';" in csp
+    assert "googleapis" not in csp and "gstatic" not in csp
+    assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert res.headers["X-Content-Type-Options"] == "nosniff"
+    font = client.get("/static/fonts/inter-latin.woff2")
+    assert font.status_code == 200 and font.content.startswith(b"wOF2")
+    assert "fonts.googleapis.com" not in portal_app.TEMPLATES["shell"]
+
+
+def test_frame_ancestors_derived_from_databricks_host():
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {"DATABRICKS_HOST": "https://adb-123.azuredatabricks.net/"}
+    assert frame_ancestors(env) == ["'self'", "https://adb-123.azuredatabricks.net"]
+    assert x_frame_options(environ=env) is None
+
+
+def test_frame_ancestors_appends_env_entries():
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {
+        "DATABRICKS_HOST": "workspace.example.com",
+        "FRAME_ANCESTORS": "https://apps.example.com, https://preview.example.com:443",
+    }
+    assert frame_ancestors(env) == [
+        "'self'",
+        "https://workspace.example.com",
+        "https://apps.example.com",
+        "https://preview.example.com:443",
+    ]
+    assert x_frame_options(environ=env) is None
+    assert frame_ancestors({}) == ["'self'"]
+    assert x_frame_options(environ={}) == "SAMEORIGIN"
+
+
+@pytest.mark.parametrize("bad", [
+    "*", "http://example.com", "https://example.com/path",
+    "https://example.com;script-src", "https://example.com;report-uri",
+    "https://example.com?x=1", "https://example.com#f", "https://user:pass@host.com",
+    "ftp://example.com", "https://https://example.com", "'self'", "'none'",
+])
+def test_frame_ancestors_rejects_bad_entries_at_startup(bad):
+    from portal.settings import frame_ancestors
+    with pytest.raises(ValueError, match="FRAME_ANCESTORS"):
+        frame_ancestors({"FRAME_ANCESTORS": bad})
+
+
+@pytest.mark.parametrize("bad", [
+    "example.com;script-src", "https://example.com;script-src",
+    "example.com\r\nevil.com", "example.com\nevil.com",
+    "example.com/path", "https://example.com/path",
+    "example.com?x=1", "example.com#frag",
+    "user:pass@host.com", "https://user:pass@host.com",
+    "*", "'self'", "'none'", '"example.com"',
+    "https://https://example.com", "ftp://example.com",
+    "https://ftp://example.com",
+])
+def test_frame_ancestors_rejects_malformed_databricks_host_at_startup(bad):
+    from portal.settings import frame_ancestors
+    with pytest.raises(ValueError, match="DATABRICKS_HOST"):
+        frame_ancestors({"DATABRICKS_HOST": bad, "PORTAL_ENV": "prod"})
+
+
+@pytest.mark.parametrize("raw, origin", [
+    ("https://adb-123.azuredatabricks.net/", "https://adb-123.azuredatabricks.net"),
+    ("adb-123.azuredatabricks.net", "https://adb-123.azuredatabricks.net"),
+    ("HTTPS://ADB-123.AZUREDATABRICKS.NET/", "https://adb-123.azuredatabricks.net"),
+    ("dbc-xxx.cloud.databricks.com", "https://dbc-xxx.cloud.databricks.com"),
+    ("https://dbc-abc.cloud.databricks.com/", "https://dbc-abc.cloud.databricks.com"),
+])
+def test_normal_workspace_hosts_are_accepted_as_frame_ancestors(raw, origin):
+    from portal.settings import frame_ancestors, x_frame_options
+    env = {"DATABRICKS_HOST": raw}
+    assert frame_ancestors(env) == ["'self'", origin]
+    assert x_frame_options(environ=env) is None
+
+
+def test_empty_databricks_host_stays_self_only():
+    from portal.settings import frame_ancestors, x_frame_options
+    for env in ({}, {"DATABRICKS_HOST": ""}, {"DATABRICKS_HOST": "   "}):
+        assert frame_ancestors(env) == ["'self'"]
+        assert x_frame_options(environ=env) == "SAMEORIGIN"
+
+
+def test_ipv6_frame_ancestors_keep_brackets():
+    from portal.settings import frame_ancestors
+    assert frame_ancestors({"FRAME_ANCESTORS": "https://[::1]"}) == ["'self'", "https://[::1]"]
+    assert frame_ancestors({"FRAME_ANCESTORS": "https://[::1]:443"}) == ["'self'", "https://[::1]:443"]
+    assert frame_ancestors({"DATABRICKS_HOST": "https://[::1]/"}) == ["'self'", "https://[::1]"]
+
+
+def test_unhandled_500_sends_security_headers(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app as portal_app
+    from starlette.routing import Route
+
+    async def boom(request):
+        raise RuntimeError("boom")
+
+    route = Route("/__test_boom__", boom, methods=["GET"])
+    portal_app.app.router.routes.append(route)
+    monkeypatch.setattr(portal_app, "current_user", lambda request: object())
+    try:
+        # Starlette always re-raises after sending the 500; the client must not turn that into a test failure.
+        res = TestClient(portal_app.app, raise_server_exceptions=False).get("/__test_boom__")
+        assert res.status_code == 500
+        assert "boom" not in res.text
+        assert "frame-ancestors 'self'" in res.headers["Content-Security-Policy"]
+        assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+        assert res.headers["X-Content-Type-Options"] == "nosniff"
+        assert res.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    finally:
+        portal_app.app.router.routes.remove(route)
+
 
 # --- Ask Genie: manifest rules ---
 
@@ -597,3 +725,39 @@ def test_local_hosts_override_the_committed_ones(tmp_path):
     missing.write_text("environments:\n  staging: {host: x}\n")
     with pytest.raises(ValueError, match="staging"):
         settings.with_local_hosts(cfg, missing)
+
+
+# ---------- navigation sub-menus (`group:`, decision 0017) ----------
+
+NAV_SQL = {"x": "SELECT 1 AS n FROM samples.tpch.region"}
+
+
+def nav_board(make_dashboard, slug, order, group_line=""):
+    manifest = f"title: {slug.upper()}\nsection: Samples\norder: {order}\n{group_line}\ndatasets:\n  x: {{sql: sql/x.sql}}\n"
+    return load_dashboard(make_dashboard(slug, manifest, NAV_SQL), env="prod")
+
+
+def test_group_is_optional_short_text(make_dashboard):
+    assert nav_board(make_dashboard, "plain", 1).group == ""
+    ok = nav_board(make_dashboard, "ok", 1, "group: Trip Reports")
+    assert ok.errors == [] and ok.group == "Trip Reports"
+    for bad in ("group: " + "x" * 41, "group: [a, b]", "group: ' padded '"):
+        board = nav_board(make_dashboard, f"bad{len(bad)}", 1, bad)
+        assert any("group must be" in e for e in board.errors), bad
+        assert board.group == ""
+
+
+def test_nav_puts_a_group_where_its_first_dashboard_would_be(make_dashboard, monkeypatch):
+    import app as portal_app
+    from portal.auth import User
+
+    boards = [nav_board(make_dashboard, "a", 1), nav_board(make_dashboard, "b", 2, "group: Trips"),
+              nav_board(make_dashboard, "c", 3), nav_board(make_dashboard, "d", 4, "group: Trips")]
+    monkeypatch.setattr(portal_app, "LIVE", {b.slug: b for b in boards})
+    html = portal_app.nav_html(User(key="u", email="u@example.com", groups=frozenset(), client=None), "d")
+    assert html.count('class="pn-group"') == 1 and html.count("<summary>Trips</summary>") == 1
+    assert "<details open>" in html  # expanded by default
+    order = [html.index(f'href="/d/{s}"') for s in "abcd"]
+    assert order[0] < html.index("<summary>") < order[1] < order[3] < order[2]  # b and d grouped, before c
+    group = html[html.index('class="pn-group"'):html.index("</details>")]
+    assert '/d/b"' in group and '/d/d" aria-current="page"' in group and "/d/c" not in group

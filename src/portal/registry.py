@@ -1,6 +1,7 @@
 """Discovers dashboards: src/dashboards/<slug>/dashboard.yml + index.html + sql/*.sql."""
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,9 @@ import yaml
 from .settings import CATALOGS, DATE_TOKENS, ENVIRONMENTS, LIBS, SECTIONS, current_env, localise_sql
 
 DASHBOARDS_DIR = Path(__file__).resolve().parent.parent / "dashboards"
+REVIEWED_PAGES = DASHBOARDS_DIR.parent / "reviewed_pages.yml"  # reviewed page code, by digest (decision 0018)
+SHARED_APPROVALS = DASHBOARDS_DIR.parent / "shared_cache.yml"  # reviewed viewer-independent SQL (decision 0018)
+TEXT_ASSETS = {".js", ".css", ".svg"}  # hashed as text with LF line endings, like index.html
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 DATASET_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 PARAM_RE = re.compile(r"(?<![:\w]):([A-Za-z_][A-Za-z0-9_]*)")  # :name, not ::cast
@@ -27,6 +31,7 @@ GENIE_KEYS = {"space_id", "sample_questions", "about"}
 GENIE_MAX_SAMPLES = 5
 GENIE_MAX_SAMPLE_LEN = 200
 GENIE_MAX_ABOUT_LEN = 600
+GROUP_MAX_LEN = 40  # `group:` on a dashboard: the sub-menu heading in the left navigation
 SOURCE_MAX_LEN = 200  # `source:` on a dataset: a short note on how its source tables are built
 PAGE_KINDS = ("lakeboard", "artifact")  # `page:`; artifact = a Claude Dashboard artifact, run as-is (decision 0011)
 STATUSES = ("live", "draft")  # `status:`; draft = only drafts_groups and the dashboard's groups see it
@@ -42,6 +47,37 @@ ASSET_MAX_BYTES = 5_000_000
 SNAPSHOT_RE = re.compile(r"^snapshots/[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.json$")
 # <script src="x"> / <link href="x"> naming a file by bare name, which a page: artifact dashboard serves from assets/
 BARE_REF_RE = re.compile(r"<(?:script|link)\b[^>]*?\s(?:src|href)\s*=\s*[\"']?(?:\./)?([A-Za-z0-9][^\"'\s>/:?#]*)[\"'\s>?#]", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class Approvals:
+    """What the data team has reviewed: page code (src/reviewed_pages.yml) and shared SQL (src/shared_cache.yml).
+
+    Keys are `<slug>` for index.html, `<slug>/assets/<file>` for an artifact page's files, and `<slug>/<dataset>`
+    for SQL. Values are SHA-256 digests (`digest()`), so any edit needs a new review."""
+    pages: dict
+    shared: dict
+
+
+def digest(path: Path) -> str:
+    """SHA-256 of a page, SQL or text asset as UTF-8 text with LF line endings (read_text turns CRLF into LF, so a
+    Windows checkout gets the same digest); other assets (images, fonts) as raw bytes."""
+    if path.suffix.lower() in {".html", ".sql"} | TEXT_ASSETS:
+        return hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_approvals() -> Approvals:
+    """Both approval files. A missing or malformed file stops loading: the gate never fails open."""
+    out = []
+    for path in (REVIEWED_PAGES, SHARED_APPROVALS):
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else None
+        if data is None:
+            data = {}
+        if not isinstance(data, dict) or not all(isinstance(v, str) for v in data.values()):
+            raise ValueError(f"src/{path.name} must map names to SHA-256 digests")
+        out.append(data)
+    return Approvals(pages=out[0], shared=out[1])
 
 
 def parse_ttl(value: str | int | None, default: int = 3600) -> int:
@@ -104,6 +140,9 @@ class Dataset:
     source: str = ""  # optional plain-text note on how the source is built, shown in the freshness panel
     todo: bool = False  # not connected yet (e.g. imported from a Claude artifact): never queried, see snapshot
     snapshot: str = ""  # todo only: snapshots/<id>.json, served instead in a local preview run (gitignored)
+    warm_at: str = "schedule"  # schedule includes app startup; startup runs once per process
+    data_through: str = ""  # optional DATE result column: latest event day present in this result
+    refresh: str = "changed"  # "always" for queries with dependencies beyond their source tables
 
     @property
     def cache_kind(self) -> str:
@@ -182,6 +221,7 @@ class Dashboard:
     page: str
     path: Path
     section: str = "Other"
+    group: str = ""  # optional `group:`: sub-menu heading inside the section in the left navigation
     environments: list[str] = field(default_factory=lambda: list(ENVIRONMENTS))
     libs: list[str] = field(default_factory=list)
     replaces: str = ""
@@ -191,6 +231,7 @@ class Dashboard:
     status: str = "live"  # `status:` live (default) or draft
     assets: dict[str, Path] = field(default_factory=dict)  # page: artifact only; name -> file in assets/
     warnings: list[str] = field(default_factory=list)  # reported by check.py; they don't stop the dashboard loading
+    unreviewed: list[str] = field(default_factory=list)  # the review errors (also in errors); a local run allows them
 
     @property
     def draft(self) -> bool:
@@ -200,16 +241,17 @@ class Dashboard:
         """The Genie space for this environment, or None (no chat bar)."""
         return self.genie.space_ids.get(env) if self.genie else None
 
-    def catalogue_entry(self) -> dict:
-        return {"slug": self.slug, "title": self.title, "description": self.description, "owner": self.owner,
-                "section": self.section}
 
-
-def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
+def load_dashboard(folder: Path, env: str | None = None, approvals: Approvals | None = None) -> Dashboard:
+    """One dashboard. A folder under src/dashboards/ is checked against the approval files (decision 0018); a test
+    dashboard elsewhere only when `approvals` is passed."""
     env = env or current_env()
+    if approvals is None and folder.parent.resolve() == DASHBOARDS_DIR.resolve():
+        approvals = load_approvals()
     slug = folder.name
     errors: list[str] = []
     warnings: list[str] = []
+    unreviewed: list[str] = []
     if not SLUG_RE.match(slug):
         errors.append(f"folder name {slug!r} must be lowercase letters, digits and hyphens")
     manifest = yaml.safe_load((folder / "dashboard.yml").read_text(encoding="utf-8")) or {}
@@ -262,14 +304,25 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
         auth = spec.get("auth", "user")
         if auth not in ("user", "app"):
             errors.append(f"dataset {ds_id}: auth must be user or app")
+        if auth == "app" and (not manifest.get("groups") or not spec.get("groups")):
+            errors.append(f"dataset {ds_id}: auth: app needs explicit groups on the dashboard and on the dataset, "
+                          "because the data is read as the app, not as the viewer")
         if auth == "app" and used:
             errors.append(f"dataset {ds_id}: auth: app datasets cannot take parameters")
         cache = spec.get("cache", "user")
         if cache not in ("user", "shared"):
             errors.append(f"dataset {ds_id}: cache must be user or shared")
+        if approvals is not None and auth == "user" and cache == "shared" and not todo                 and approvals.shared.get(f"{slug}/{ds_id}") != digest(sql_path):
+            unreviewed.append(f"dataset {ds_id}: cache: shared needs a review of its SQL recorded in src/shared_cache.yml "
+                              f"(python scripts/approve.py {slug})")
         warm = list(spec.get("warm") or [])
         if warm and cache != "shared":
             errors.append(f"dataset {ds_id}: warm needs cache: shared")
+        warm_at = spec.get("warm_at", "schedule")
+        if warm_at not in ("schedule", "startup"):
+            errors.append(f"dataset {ds_id}: warm_at must be schedule or startup")
+        if "warm_at" in spec and not warm:
+            errors.append(f"dataset {ds_id}: warm_at needs a warm parameter list")
         for entry in warm:
             unknown = [k for k in (entry or {}) if k not in used] if isinstance(entry, dict) else [entry]
             if unknown:
@@ -280,12 +333,23 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
             source = ""
         elif len(source) > SOURCE_MAX_LEN:
             errors.append(f"dataset {ds_id}: source must be at most {SOURCE_MAX_LEN} characters")
+        data_through = spec.get("data_through", "")
+        if not isinstance(data_through, str) or (data_through and not re.fullmatch(r"[A-Za-z_]\w*", data_through)):
+            errors.append(f"dataset {ds_id}: data_through must name a DATE result column")
+            data_through = ""
+        refresh = spec.get("refresh", "changed")
+        if refresh not in ("changed", "always"):
+            errors.append(f"dataset {ds_id}: refresh must be changed or always")
+            refresh = "changed"
         datasets[ds_id] = Dataset(
             id=ds_id, title=spec.get("title", ds_id), description=spec.get("description", ""), sql=localise_sql(sql, env),
             params=used, cache_ttl=parse_ttl(spec.get("cache_ttl")), auth=auth, groups=list(spec.get("groups") or []),
             shared=cache == "shared" or auth == "app", warm=[w for w in warm if isinstance(w, dict)],
             background=bool(spec.get("background", True)), source=" ".join(source.split()),
             todo=todo, snapshot=snapshot if todo else "",
+            warm_at=warm_at,
+            data_through=data_through,
+            refresh=refresh,
         )
     page_path = folder / "index.html"
     page = page_path.read_text(encoding="utf-8") if page_path.is_file() else ""
@@ -299,6 +363,13 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
         errors.append(f"status must be one of {list(STATUSES)}")
     assets, asset_errors = load_assets(folder, page_kind == "artifact")
     errors += asset_errors
+    if approvals is not None:
+        reviewed = {"index.html": (slug, page_path)} if page else {}
+        reviewed.update({f"assets/{n}": (f"{slug}/assets/{n}", p) for n, p in assets.items()})
+        for name, (key, path) in reviewed.items():
+            if approvals.pages.get(key) != digest(path):
+                unreviewed.append(f"{name} has no matching review in src/reviewed_pages.yml (python scripts/approve.py {slug})")
+    errors += unreviewed
     scripts = {"index.html": page}
     scripts.update({f"assets/{n}": p.read_text(encoding="utf-8", errors="replace") for n, p in assets.items() if n.endswith(".js")})
     calc_ids = {c for text in scripts.values() for c in re.findall(r"dash\.calc\(\s*['\"]([A-Za-z0-9_-]+)['\"]", text)}
@@ -315,6 +386,12 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
     section = manifest.get("section", "Other")
     if section not in SECTIONS:
         errors.append(f"section {section!r} must be one of {SECTIONS} (new sections are added in src/environments.yml)")
+    group = manifest.get("group", "")
+    if group is None:
+        group = ""
+    if not isinstance(group, str) or len(group) > GROUP_MAX_LEN or group != group.strip():
+        errors.append(f"group must be short text ({GROUP_MAX_LEN} characters at most) with no leading or trailing spaces")
+        group = ""
     envs = list(manifest.get("environments") or ENVIRONMENTS)
     for e in envs:
         if e not in ENVIRONMENTS:
@@ -328,11 +405,11 @@ def load_dashboard(folder: Path, env: str | None = None) -> Dashboard:
     return Dashboard(
         slug=slug, title=manifest.get("title", slug), description=manifest.get("description", ""),
         owner=manifest.get("owner", ""), groups=list(manifest.get("groups") or []), order=int(manifest.get("order", 100)),
-        datasets=datasets, params=params, page=page, path=folder, section=section, environments=envs, libs=libs,
+        datasets=datasets, params=params, page=page, path=folder, section=section, group=group, environments=envs, libs=libs,
         replaces=str(manifest.get("replaces", "")), errors=errors, genie=genie,
         page_kind=page_kind if page_kind in PAGE_KINDS else "lakeboard",
         status=status if status in STATUSES else "draft",  # an unreadable status is treated as the safer one
-        assets=assets, warnings=warnings,
+        assets=assets, warnings=warnings, unreviewed=unreviewed,
     )
 
 
@@ -363,9 +440,10 @@ def load_assets(folder: Path, allowed: bool) -> tuple[dict[str, Path], list[str]
 
 def load_all(root: Path = DASHBOARDS_DIR, env: str | None = None) -> dict[str, Dashboard]:
     """Every dashboard, valid or not, in navigation order. Callers filter on .errors and .environments."""
+    approvals = load_approvals() if root.resolve() == DASHBOARDS_DIR.resolve() else None
     boards = {}
     for folder in sorted(p for p in root.iterdir() if (p / "dashboard.yml").is_file()):
-        d = load_dashboard(folder, env)
+        d = load_dashboard(folder, env, approvals)
         boards[d.slug] = d
     rank = {s: i for i, s in enumerate(SECTIONS)}
     return dict(sorted(boards.items(), key=lambda kv: (rank.get(kv[1].section, 99), kv[1].order, kv[1].title)))

@@ -8,17 +8,19 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 from databricks.sdk import WorkspaceClient
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 
-from portal import data, genie, snapshots, sources, usage, xlsx
+from portal import access, data, genie, snapshots, sources, usage, xlsx
 from portal.auth import LOCAL_PROFILE, User, can_open, can_open_dashboard, current_user
 from portal.registry import ASSET_TYPES, Dashboard, load_all
 from portal.settings import (BRAND, DRAFTS_GROUPS, IMAGE_HOSTS, LIBS, LOCALE, SECTIONS, TIMEZONE, WARM, current_env,
-                             is_local_run, resolve_default)
+                             frame_ancestors, is_local_run, resolve_default, x_frame_options)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("portal")
@@ -28,17 +30,21 @@ ENV = current_env()
 sources.load_map(ENV)  # deploy-time view map for the freshness label, if built for this environment
 VERSION = str(int(time.time()))  # added to static URLs so browsers pick up new files after a deploy
 
-# Pages run with the viewer's data access, so the browser may only talk to this app (plus fonts and map tiles).
+# Pages run with the viewer's data access, so the browser may only talk to this app (plus map tiles).
+# A bad FRAME_ANCESTORS value raises here so the app does not start with an open or broken policy.
+_FRAME_ANCESTORS = frame_ancestors()
+_X_FRAME_OPTIONS = x_frame_options(_FRAME_ANCESTORS)
 CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data: blob: " + " ".join(IMAGE_HOSTS),
     "connect-src 'self'",
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
+    "frame-ancestors " + " ".join(_FRAME_ANCESTORS),
 ])
 
 
@@ -51,12 +57,20 @@ def render(name: str, **values: str) -> str:
     return out.replace("[[page]]", page) if page is not None else out
 
 
+LOCAL_RUN = is_local_run()  # a developer's own run: drafts are shown to them (decision 0011)
+
+
+def blocking_errors(d: Dashboard, local: bool = False) -> list[str]:
+    """What stops a dashboard loading. A developer's local run still shows a page or shared SQL that is waiting
+    for the data team's review (decision 0018); a deployed app never does."""
+    return [e for e in d.errors if not (local and e in d.unreviewed)]
+
+
 DASHBOARDS = load_all(env=ENV)
 for d in DASHBOARDS.values():
     for err in d.errors:
-        log.error("dashboard %s: %s", d.slug, err)
-LIVE = {k: v for k, v in DASHBOARDS.items() if not v.errors and ENV in v.environments}
-LOCAL_RUN = is_local_run()  # a developer's own run: drafts are shown to them (decision 0011)
+        (log.warning if LOCAL_RUN and err in d.unreviewed else log.error)("dashboard %s: %s", d.slug, err)
+LIVE = {k: v for k, v in DASHBOARDS.items() if not blocking_errors(v, LOCAL_RUN) and ENV in v.environments}
 PREVIEW_SNAPSHOTS = snapshots.preview_enabled()  # local only: todo datasets serve their snapshot rows
 if PREVIEW_SNAPSHOTS:
     log.warning("snapshot preview is on: todo datasets serve rows from their local snapshots/ file, not Databricks")
@@ -80,14 +94,33 @@ app = FastAPI(title=str(BRAND["name"]), lifespan=lifespan, docs_url=None, redoc_
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Content-Security-Policy"] = CSP
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    # Send only our origin (never the path) to other sites. OpenStreetMap blocks tile requests that carry no referrer.
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    return response
+class SecurityHeadersMiddleware:
+    """Stamps the policy on every HTTP response, including unhandled 500s (Starlette's error handler sits outside @middleware)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["Content-Security-Policy"] = CSP
+                headers["X-Content-Type-Options"] = "nosniff"
+                # Send only our origin (never the path) to other sites. OpenStreetMap blocks tile requests that carry no referrer.
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+                if _X_FRAME_OPTIONS:
+                    headers["X-Frame-Options"] = _X_FRAME_OPTIONS
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+_build = app.build_middleware_stack
+app.build_middleware_stack = lambda: SecurityHeadersMiddleware(_build())
 
 
 def board_for(request: Request, slug: str) -> tuple[Dashboard, User]:
@@ -109,29 +142,46 @@ DRAFT_BADGE = '<span class="pn-draft" title="Draft: not published yet; only some
 
 
 def nav_html(user: User, active: str | None) -> str:
-    """Left navigation: one block per section, listing the dashboards this user may open."""
+    """Left navigation: one block per section, listing the dashboards this user may open.
+
+    Dashboards in a section that share a `group:` sit under one collapsible sub-menu (decision 0017).
+    """
     out = []
     for section in SECTIONS:
         items = [d for d in LIVE.values() if d.section == section and may_open(user, d)]
         if not items:
             continue
-        links = ""
-        for d in items:
+
+        def link(d) -> str:
             current = ' aria-current="page"' if d.slug == active else ""
             badge = DRAFT_BADGE if d.draft else ""
-            links += f'<li><a href="/d/{d.slug}"{current} title="{html.escape(d.description)}">{html.escape(d.title)}{badge}</a></li>'
+            return f'<li><a href="/d/{d.slug}"{current} title="{html.escape(d.description)}">{html.escape(d.title)}{badge}</a></li>'
+
+        links, done = "", set()
+        for d in items:  # a group sits where its first dashboard would; ungrouped dashboards stay top level
+            if not d.group:
+                links += link(d)
+            elif d.group not in done:
+                done.add(d.group)
+                members = "".join(link(m) for m in items if m.group == d.group)
+                links += (f'<li class="pn-group"><details open><summary>{html.escape(d.group)}</summary>'
+                          f'<ul>{members}</ul></details></li>')
         out.append(f'<div class="pn-section"><h2>{html.escape(section)}</h2><ul>{links}</ul></div>')
     return "\n".join(out) or '<p class="pn-empty">No dashboards are shared with you yet.</p>'
 
 
-# The freshness label (dash.js fills it in) and the Refresh button. Not on the home page, which has no data.
+# The freshness label and refresh controls. Not shown on the home page.
 REFRESH_HTML = (
     '<div class="pn-fresh-wrap">'
     '<button type="button" class="pn-fresh" id="pn-fresh" aria-expanded="false" aria-controls="pn-fresh-panel" hidden>'
     '<span class="pn-fresh-long"></span><span class="pn-fresh-short"></span></button>'
     '<div class="pn-fresh-panel" id="pn-fresh-panel" role="dialog" aria-label="How fresh this data is" tabindex="-1" hidden></div>'
     '</div>'
-    '<button type="button" class="pn-refresh" onclick="dash.refreshAll()">Refresh data</button>'
+    '<div class="pn-refresh-actions">'
+    '<button type="button" class="pn-refresh" onclick="dash.refreshChanged()">Refresh data</button>'
+    '<button type="button" class="pn-refresh" onclick="dash.refreshAll()">Refresh all</button>'
+    '<span class="pn-refresh-status" id="pn-refresh-status" role="status"></span>'
+    '</div>'
 )
 
 
@@ -234,20 +284,33 @@ async def dataset(request: Request, slug: str, dataset_id: str, refresh: int = 0
     else:
         client, who = user.client, "shared" if ds.shared else user.key
     try:
+        await asyncio.to_thread(access.SHARED_ACCESS.check, d, ds, client, user.key, raw)
         payload = await asyncio.to_thread(data.fetch, d, ds, client, who, raw, bool(refresh))
+    except access.AccessDenied as e:
+        return JSONResponse({"error": str(e)}, status_code=403, headers={"Cache-Control": "private, no-store"})
+    except access.AccessUnavailable as e:
+        return JSONResponse({"error": str(e)}, status_code=502, headers={"Cache-Control": "private, no-store"})
     except data.QueryError as e:
         log.warning("%s/%s failed: %s", slug, dataset_id, e)
         return JSONResponse({"error": str(e)}, status_code=502)
-    return JSONResponse({**payload, "cache": ds.cache_kind}, headers={"Cache-Control": "private, no-store"})
+    etag = payload.pop("etag")  # payload is a copy of the cache entry, so this doesn't change the cache
+    headers = {"Cache-Control": "private, no-store", "ETag": f'"{etag}"'}
+    if not refresh and payload["cached"] and request.headers.get("if-none-match") == headers["ETag"]:
+        return Response(status_code=304, headers=headers)
+    return JSONResponse({**payload, "cache": ds.cache_kind, "data_through": data.data_through(ds, payload)}, headers=headers)
 
 
 @app.get("/api/d/{slug}/sources")
-async def dataset_sources(request: Request, slug: str):
-    """When each dataset's source tables last changed (Unity Catalog metadata, read as the app; no SQL is run)."""
+async def dataset_sources(request: Request, slug: str, check: Annotated[list[str] | None, Query()] = None):
+    """Read source metadata as the app. An explicit refresh check bypasses the display metadata cache."""
     d, user = board_for(request, slug)
     allowed = {k: v for k, v in d.datasets.items() if can_open(user, v.groups) and not v.todo}
-    out = await sources.for_datasets(allowed, app_client())
-    return JSONResponse({"datasets": out}, headers={"Cache-Control": "private, no-store"})
+    if check is None:
+        body = {"datasets": await sources.for_datasets(allowed, app_client())}
+    else:
+        requested = {k: allowed[k] for k in set(check) & allowed.keys()}
+        body = {"checks": await sources.refresh_checks(d, requested, app_client())}
+    return JSONResponse(body, headers={"Cache-Control": "private, no-store"})
 
 
 # ---------- Ask Genie (docs/DESIGN.md): always as the viewer, never as the app's service principal ----------
@@ -276,7 +339,7 @@ async def genie_body(request: Request) -> dict:
     try:
         body = json.loads(raw or b"{}")
     except ValueError:
-        raise HTTPException(400, "The request must be JSON")
+        raise HTTPException(400, "The request must be JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "The request must be a JSON object")
     return body
@@ -350,7 +413,7 @@ async def export_xlsx(request: Request):
             raise ValueError("The request must be a JSON object")
         content = await asyncio.to_thread(xlsx.build, body.get("sheets"))
     except (ValueError, TypeError, AttributeError, KeyError, RecursionError) as e:
-        raise HTTPException(400, str(e)[:200] or "The Excel data was not valid")
+        raise HTTPException(400, str(e)[:200] or "The Excel data was not valid") from e
     name = xlsx.safe_filename(body.get("name"))
     return Response(content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "private, no-store"})

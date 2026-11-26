@@ -29,7 +29,12 @@ Say a dashboard shows contract prices to everyone who can open it. To limit that
    Catalog controls what the person can query anywhere.
 
 Group names are the group display names as they appear in the Databricks workspace (account groups, or groups
-synced from your identity provider).
+synced from your identity provider). The portal caches each person's groups for one minute, so a removed
+membership stops counting within about a minute (plus however long Databricks takes to propagate it).
+
+An `auth: app` dataset is read as the app's service principal, so Unity Catalog no longer protects it per viewer.
+The checks refuse one unless both the dashboard and the dataset name their `groups:`
+([decision 0018](decisions/0018-publishing-guards.md)).
 
 ### The sample dashboards
 
@@ -73,7 +78,8 @@ conversation history in the space, where the space's managers can review them wi
 
 ## Starting and stopping (cost)
 
-The app bills while it runs. The example pipelines stop dev and test after every deployment.
+The app bills while it runs. The GitHub Actions deploy stops test after every deployment and leaves dev (`develop`)
+and prod running; the Azure DevOps pipeline stops dev and test.
 
 ```bash
 databricks -p <your-profile> apps start lakeboard-dev
@@ -87,6 +93,32 @@ Prod keeps running. To save cost out of hours, stop it in the evening with a sch
 or script task running `databricks apps stop lakeboard`, or the SDK's `w.apps.stop("lakeboard")`). Nothing has
 to start it again: the first person to open the portal does. Stopping empties the cache (see
 [How data refreshes](#how-data-refreshes)). See decision 0005 for the reasoning.
+
+### First CI deploy to an app that already exists
+
+App names are unique in a workspace, and each identity that deploys keeps its own bundle state under its own
+`root_path`. So when `lakeboard-dev`, `lakeboard-test` or `lakeboard` was created by hand or deployed by a person, the
+CI service principal's first `bundle deploy` fails with "An app with the same name already exists".
+
+The pipelines handle this (`scripts/deploy_bundle.sh`, decision 0020): on that exact error they bind the existing app
+to the bundle and deploy again, so the deploy updates it. You'll see the first error in the log, then a line saying
+the app is being bound. The principal needs `CAN MANAGE` on the app; if it doesn't have it, the step fails and says
+so. Grant it on the app (Compute > Apps > the app > Permissions) and run the pipeline again.
+
+Before the first such deploy:
+- **Settings the bundle doesn't declare** (for example `budget_policy_id`): copy them into the bundle, or the deploy
+  can fail or drop them.
+- **Grants made by hand on the app**: the bundle's `permissions` take over, so add any you want to keep to
+  `resources/portal.app.yml` or the target in `databricks.yml`.
+- **Stop deploying that target from a laptop.** Two bundle states managing one app overwrite each other, and a
+  `bundle destroy` from either deletes it. For a personal app, set your own `app_name` in `databricks.local.yml`.
+
+To bind by hand instead (as the CI service principal, with `databricks.local.yml` and `src/environments.local.yml` in
+place so the target points at the same workspace):
+
+```bash
+databricks bundle deployment bind portal lakeboard-dev --target dev --auto-approve
+```
 
 ## How data refreshes
 
@@ -116,38 +148,52 @@ A result is stored under: **dashboard + dataset + who + the filter values that d
 | Default | One per viewer, per filter combination. Runs as the viewer | When someone asks and the result is older than `cache_ttl`, or they press Refresh | Anything with row-level security, or data only some people may see |
 | `cache: shared` | One for everybody, per filter combination. Runs as the first viewer to ask | Same as default | Data every viewer may see (no row-level security) |
 | `cache: shared` plus `warm:` | As above | The same, and also in the background at the `warm.times` on weekdays (in `warm.timezone`) and once when the app starts. Only in the `warm.environments` (prod by default). Runs as the portal's service principal | Shared data that is slow and has a few common views, so people find it ready |
+| `cache: shared` plus `warm:` and `warm_at: startup` | As above | Only once, in the background, when the app starts (in the `warm.environments`); never at the `warm.times`. After that, when someone asks and the result is older than `cache_ttl`, or they press Refresh. Runs as the portal's service principal | Slow shared data where scheduled runs would cost too much warehouse time, or data that doesn't change during the day. Pair it with a long `cache_ttl` (for example 24h) so the first viewer after start-up doesn't re-run it |
 | `auth: app` | One for everybody. Runs as the portal's service principal, so viewers need no Unity Catalog access. It cannot take filters | Default (`background: true`): in the background every `cache_ttl` minus 5 minutes, never more often than every 5 minutes (after a failure it retries in 15 minutes). With `background: false`: only when someone asks and the result has expired | People who have no access to the tables themselves |
 
 Notes:
 
 - Warming times, the time zone (any IANA zone; default UTC) and the environments are under `warm:` in `src/environments.yml`.
 - Warming needs the service principal to have read access to the views. `python scripts/grant_app_access.py --env prod --profile <your-profile> --warehouse <warehouse-id>` prints the grants, and `--apply` runs them. Run it for each environment that has `auth: app` or warmed datasets. Until that is done, warming fails quietly (it is logged) and the first viewer's query fills the cache instead.
+- `warm_at` (optional, only with `warm:`): `schedule` (the default) warms at start-up and at each `warm.times`;
+  `startup` warms only once, at start-up. See [Shared-result access and startup policy](#shared-result-access-and-startup-policy).
 - Each `warm:` entry is one filter combination. Any other combination runs on first use.
 - Use `cache: shared` only where every viewer may see the same rows. The result one person's query produced is shown to the next.
+  Before a shared result is returned, LakeBoard still checks that this viewer may run the query
+  ([below](#shared-result-access-and-startup-policy)); that protects the sources, not differences in rows.
 - A scheduled warm re-runs the query even if the cached result is still fresh. It replaces the result and restarts the clock.
 
-### The Refresh data button
+### Refresh data and Refresh all
 
-- It is at the top right. It re-runs the datasets the page has loaded so far, ignoring the cache, and stores the new results. (A dataset loads when the page first asks for it. One not asked for yet loads normally when it is.)
-- For `cache: shared` and `auth: app` datasets the new result replaces the shared one, so **everyone** sees it, not just the person who pressed the button. For default datasets it replaces only that person's result.
-- The old data stays on screen, marked as refreshing, until the new data arrives. If the refresh fails, the page shows the error.
-- A refresh runs on the warehouse straight away. A slow dataset takes as long as it did the first time.
+- **Refresh data** checks the sources of datasets the page has already loaded. It reads each distinct source once
+  from fresh Unity Catalog metadata and reruns a dataset's query if any source changed since the query began.
+  It reuses valid results for unchanged direct managed Delta tables and fixed sample data, subject to the existing access checks.
+- If LakeBoard cannot verify every input, it reruns the query. This includes views, external and federated tables,
+  unavailable metadata, time-dependent SQL and datasets configured with `refresh: always`. A missing or expired
+  result also needs a query. For a join, a change on either side reruns the complete dataset query.
+- **Refresh all** bypasses the result cache for every loaded dataset. A dataset the page hasn't asked for yet still loads on demand.
+  While any query on the page is still running, it does nothing and asks you to wait, so it never skips or duplicates a
+  query. A second press of either button during a refresh is ignored.
+- Every new result gets its own random ETag, so a result that replaced another never matches the old one's ETag, even
+  when both were fetched within the same clock tick.
+- A new shared or app-auth result replaces the shared cache entry. A per-viewer result replaces that viewer's entry.
+  The page reports how many results were updated, unchanged or failed.
 - Changing a filter that is sent to SQL reloads only the datasets that use it. They use the cache if it already holds that combination. Other filters work in the browser and run nothing.
 
 ### What the sample dashboards use
 
-All three read sample data that never changes and has no row-level security, so their datasets use
+All sample dashboards read sample data that never changes and has no row-level security, so their datasets use
 `cache: shared` with a long `cache_ttl` (6 to 24 hours). City Trips and Sales & Margin also `warm:` their default
-filters, so the first viewer after a start finds them ready. Each dashboard's `dashboard.yml` says why in a comment.
+filters once per process with `warm_at: startup`, so scheduled warms do not re-query fixed samples. Each dashboard's `dashboard.yml` says why in a comment.
 
 ### Example: a prod weekday
 
 1. **Early morning.** The app is stopped (if you stop it overnight) and its cache is empty. The first person to open the portal starts it.
 2. **App starts.** Warming runs once at start-up and fills every `warm:` entry. Anyone who opens one of those dashboards before it finishes runs the query themselves.
 3. **First viewers.** Default datasets run as each person on first open. Later opens within the `cache_ttl` are instant. `auth: app` datasets run as the service principal and are reused for everyone.
-4. **First warm time** (07:00 by default). The warm run re-runs every `warm:` entry and replaces the results. (If the app only just started, this repeats the start-up warm.)
-5. **Midday.** Someone presses **Refresh data** on a shared dashboard. Every loaded dataset re-runs. The new result is what everyone sees from then on.
-6. **Second warm time** (13:00 by default). The warm run happens again.
+4. **First warm time** (07:00 by default). The warm run re-runs every `warm:` entry and replaces the results, except datasets with `warm_at: startup`, which keep their start-up result until it expires. (If the app only just started, this repeats the start-up warm.)
+5. **Midday.** Someone presses **Refresh data** on a shared dashboard. Loaded datasets whose sources changed, or can't be verified, re-run; the rest keep their result. (**Refresh all** re-runs every loaded dataset.) A new shared result is what everyone sees from then on.
+6. **Second warm time** (13:00 by default). The warm run happens again, as at the first warm time.
 7. **Evening.** If a job stops the app, the cache is gone. The next day starts again at step 1.
 
 ### Freshness is capped by the source
@@ -160,6 +206,19 @@ The cache only decides how often the portal asks again. It cannot make data newe
 - A query is stopped after 10 minutes (`PORTAL_QUERY_TIMEOUT`) and returns at most 500,000 rows (`PORTAL_MAX_ROWS`). A result cut at the row limit is flagged to the page.
 - A query that fails shows on the page as "Couldn't load this data" with the reason. A very long request can also time out at the Databricks Apps proxy before the app answers, and the page shows an error then too. Press Refresh to retry. (Nothing in this repo sets or shows the proxy's limit, so no figure is given.)
 - If one slow dataset keeps causing trouble, use `cache: shared` with `warm:` (when everyone may see the same data), raise `cache_ttl`, or build a pre-aggregated table for it.
+
+### Profile a slow dataset
+
+Search the app's application logs for `dataset_query`. Each warehouse execution includes the dashboard and dataset,
+Databricks statement ID when available, elapsed milliseconds and outcome. Elapsed time covers submission, wait and result
+download. Result-cache hits do not generate a query event. The event omits SQL text, parameter values, result rows and
+viewer identity.
+
+Find the statement ID in Databricks SQL Query History and open its Query Profile. Compare scan bytes, file pruning
+and execution time for the same parameters, warehouse and cache conditions, and verify the result still matches.
+Performance Insights can suggest changes such as using the existing report date range to filter a clustering key.
+[Query history](https://docs.databricks.com/aws/en/sql/user/queries/query-history) ·
+[Query performance insights](https://docs.databricks.com/aws/en/sql/user/queries/performance-insights)
 
 ## Usage
 
@@ -192,8 +251,8 @@ Clicking it opens a panel that lists, per dataset: when it was fetched, how long
 how it is cached (your own copy, shared, shared and pre-loaded, or read by the portal), the dataset's `source:`
 note, when its source tables last changed, and (under "Source tables") each table with what is known about it.
 
-- **"· source unchanged"** means no source table has been written since the data was fetched, so Refresh would
-  return the same result. **"· newer data available"** (in green) means a source table changed after the fetch.
+- **"· source unchanged"** means the latest source metadata shows no newer write. **"· newer data available"**
+  (in green) means a tracked source table changed after the fetch. Refresh data checks current metadata before deciding.
 - **Kinds of table.** Managed tables (including materialized views and streaming tables) are timed: "changed 2 h ago
   (10:42 AM)". Federated (Lakehouse Federation, for example Snowflake or Fabric) tables are **live**: each query
   reads the remote system, so the data is current when fetched, but there is no change time. External tables are
@@ -244,6 +303,44 @@ switched off for this environment (`hidden`). A broken dashboard is left out of 
 working. The reason is in the app log. (`/healthz` still works when you run the app locally, but once deployed the
 Databricks Apps proxy answers that path itself with an empty page, so use `/api/health`.)
 
+## Review a deployment
+
+Record the revision and active deployment ID after starting the app and before any scheduled stop. Run this
+read-only check with the intended workspace profile and a recent Databricks SDK that supports app scan findings.
+The caller needs `CAN USE` for the health request and `CAN MANAGE` to read scan findings.
+
+```bash
+python scripts/review_app.py --profile <profile> --app <app-name> --env <environment> \
+  --deployment <active-deployment-id>
+# To confirm a particular finding no longer appears, also pass --tracked-rule <scanner-rule-id>.
+```
+
+1. **Health and smoke test.** Confirm the environment and the dashboard count. Open at least one changed
+   dashboard with its intended viewer identity and check live data, filters, drill-down and freshness. Record
+   first-load and repeat-load times separately for the actions users care about.
+2. **Security.** Match the Security tab's code version to the active deployment, and review new and existing
+   findings. Unavailable, incomplete, unrecorded and skipped scans have unknown coverage. An empty findings list
+   with one of those statuses cannot verify a fix. Record the result and follow up on the next deployment with
+   source changes. A tracked finding still counts as detected if it was ignored or marked resolved. Keep a
+   source review and regression test for the fix and leave triage decisions to the app owner.
+3. **Insights.** Record the time window and traffic alongside availability and service health. In **System
+   metrics**, compare requests by HTTP status, p50/p95/p99 latency, CPU versus its limit, and memory versus its
+   limit. Where available, show deployment markers to correlate changes with the release. Mark missing series or
+   sparse traffic in the review. Keep personal viewer details and raw workspace metrics out of the public repo.
+
+| Observation | Recommended follow-up |
+|---|---|
+| First loads slow down while CPU and memory have headroom | Compare cold and warm requests. Check warehouse startup, query history and cache or permission probes before changing app compute. |
+| CPU stays near its limit at normal traffic | Profile the slow routes and remeasure on representative traffic before resizing. |
+| Memory grows toward its limit | Inspect result sizes and in-process caches. Compare working set before and after peak traffic and review cache TTLs and row caps. |
+| Unexpected 401/403 or recurring 5xx | Check the affected route and time window. Separate expected identity or access denials from app errors and check runtime logs. |
+| App availability dips while service health stays high | Compare incident times with deployments, app starts/stops and runtime logs before assigning a cause. |
+
+The script returns nonzero for unhealthy or unverified deployments, open critical findings, or a present tracked
+rule. It reports its health request's HTTP duration. Use the Insights UI for the platform's system metrics and
+the dashboard smoke test for user-facing latency. See [Databricks security scanning](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/security-scanning)
+and [Databricks Apps monitoring](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/monitor).
+
 ## When something goes wrong
 
 | Symptom | Likely cause |
@@ -251,7 +348,8 @@ Databricks Apps proxy answers that path itself with an empty page, so use `/api/
 | "Couldn't load this data: … does not have USE CATALOG / SELECT" | The viewer lacks Unity Catalog access to a view. Grant it to their group |
 | The sample dashboards say `samples` is not found | The workspace has no `samples` catalog, or an admin has hidden it. Use a workspace that has it (Databricks Free Edition does), or switch the samples off |
 | A dashboard is missing from the navigation | The person isn't in its `groups`, it is switched off for this environment, or it failed validation (`/api/health`) |
-| Every page reads prod catalogs in dev | The workspace host doesn't match `environments:` in `src/environments.yml` (an unknown host counts as prod). Fix the host or set `PORTAL_ENV` |
+| App fails to start: `DATABRICKS_HOST=... matches no host` | The workspace host doesn't match `environments:` in `src/environments.yml`. Fix the host or set `PORTAL_ENV` |
+| App fails to start: `DATABRICKS_HOST is empty in a deployed app` | The deployed app has no `DATABRICKS_HOST`. Set it, or set `PORTAL_ENV`. Local runs with no host still default to prod |
 | Map tiles don't appear | The network blocks `tile.openstreetmap.org`. The points still plot |
 | Deployment fails on "Run every dataset" | A view the SQL uses doesn't exist in that environment's catalog yet, or the deploying service principal can't read it |
 | First load of a page is slow | The cache was empty (after a deployment, restart or a scheduled stop), the warehouse was busy, or the views are slow. See [How data refreshes](#how-data-refreshes). Use `cache: shared` with `warm:` if everyone sees the same data, raise `cache_ttl`, or build a pre-aggregated table |
@@ -261,3 +359,25 @@ Databricks Apps proxy answers that path itself with an empty page, so use `/api/
 | "Genie couldn't answer that. … INSUFFICIENT_PERMISSIONS …" | The person can use the space but lacks `SELECT` on a view it reads. Grant it in Unity Catalog |
 | "Genie is busy. Try again in a minute." | Genie's per-workspace question limit was reached (HTTP 429) |
 | Genie's numbers differ from the dashboard | The space reads different views or rules from the dashboard. Compare its SQL (Show SQL) with the dashboard's `sql/` files, and fix the space or the `about` text |
+
+
+## Shared-result access and startup policy
+
+Every shared user-auth dataset checks the full bound query as the reader with LIMIT 0, even on a result-cache hit
+or refresh. Allowed checks last 30 minutes, denied checks 5 minutes. Revoked grants may take 30 minutes to
+be reflected, and new grants up to 5 minutes; source-read failures return 403, and unavailable checks return 502 without cached rows. `auth: app`
+remains the explicit service-principal mode. Use per-viewer caching for viewer-specific row filters or masks.
+A decision covers every filter value: changing a filter does not run another check, unless the parameter is used
+inside `IDENTIFIER(...)` or a table function that reads by name or path. `TABLE_OR_VIEW_NOT_FOUND`,
+`SCHEMA_NOT_FOUND` and `CATALOG_NOT_FOUND` count as denials (Unity Catalog hides objects a reader can't see), so a
+newly granted reader may wait up to a minute. See decision 0013.
+
+Set `warm_at: startup` beside a dataset's `warm:` list to preload only once per process. It still requires warming
+to be enabled for that environment (`warm.environments`), and local scripts still disable background warming.
+The default `warm_at: schedule` retains startup plus weekday scheduled runs. Expiry and Refresh still run queries.
+
+The freshness panel puts changed managed tables first, newest first, with counts, a text tag and how long after
+your data each was written; unchanged tables follow, newest first; live and untracked sources come last, ordered
+by kind (live, external, static, unknown, none). It opens changed details automatically and remembers manual open/closed choices.
+Optional `data_through` names a DATE result column and shows the latest returned event day. The fetch time,
+source-write time and event coverage are different facts. Missing coverage is never replaced with today's date.

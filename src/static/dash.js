@@ -62,42 +62,109 @@
     if (rs) root.setAttribute('data-dash-state', rs); else root.removeAttribute('data-dash-state');
   }
 
-  async function load(id, refresh = false) {
+  async function load(id, mode = 'load') {
     const s = sets[id] || (sets[id] = { status: 'loading', data: [], columns: [], message: '', refreshing: false });
-    const key = keyFor(id);
-    s.key = key;
+    const request = Symbol(id);
+    s.request = request;
+    s.key = keyFor(id);
     const had = s.status === 'ok' || (s.stale && s.data.length);
     if (s.status === 'ok') s.refreshing = true; else s.status = 'loading';
     notify();
     const qs = new URLSearchParams();
     for (const p of cfg.datasets[id].params || []) if (params[p] != null && params[p] !== '') qs.set(p, params[p]);
-    if (refresh) qs.set('refresh', '1');
+    if (mode === 'force') qs.set('refresh', '1');
+    const headers = mode === 'check' && s.etag ? { 'If-None-Match': s.etag } : {};
+    let accessDenied = false;
     try {
-      const res = await fetch(`/api/d/${encodeURIComponent(cfg.slug)}/data/${encodeURIComponent(id)}?${qs}`, { credentials: 'same-origin' });
+      const res = await fetch(`/api/d/${encodeURIComponent(cfg.slug)}/data/${encodeURIComponent(id)}?${qs}`,
+        { credentials: 'same-origin', headers });
+      if (s.request !== request) return; // a newer filter or refresh superseded this request
+      if (res.status === 304) return 'unchanged';
       const body = await res.json().catch(() => ({ error: res.statusText }));
-      if (s.key !== key) return; // a newer filter superseded this request
-      if (!res.ok) throw new Error(body.error || body.detail || res.statusText);
+      if (s.request !== request) return;
+      if (!res.ok) {
+        accessDenied = res.status === 403;
+        throw new Error(body.error || body.detail || res.statusText);
+      }
       const cols = body.columns;
       s.data = body.rows.map((r) => { const o = {}; for (let i = 0; i < cols.length; i++) o[cols[i]] = r[i]; return o; });
       s.data.columns = cols;
       s.columns = cols;
       s.cut = !!body.cut;
       s.fetchedAt = body.fetched_at;
+      s.queryStartedAt = body.query_started_at;
+      s.etag = res.headers.get('ETag');
       s.expiresAt = body.expires_at;
       s.cache = body.cache || cfg.datasets[id].cache;
       s.snapshot = !!body.snapshot;
+      s.dataThrough = body.data_through || null;
       s.status = 'ok';
       s.stale = false;
       s.message = '';
+      return 'updated';
     } catch (e) {
-      if (s.key !== key) return;
+      if (s.request !== request) return;
       // An artifact keeps showing the last good data when a refresh fails ("stale"); LakeBoard pages show the error.
-      if (ARTIFACT && had && refresh) { s.status = 'ok'; s.stale = true; } else s.status = 'error';
+      if (ARTIFACT && had && mode !== 'load' && !accessDenied) { s.status = 'ok'; s.stale = true; } else s.status = 'error';
+      if (accessDenied) { s.data = []; s.columns = []; s.fetchedAt = null; s.stale = false; }
       s.message = String(e.message || e);
       console.error(`dataset ${id} failed:`, s.message);
+      return 'failed';
     } finally {
-      if (s.key === key) s.refreshing = false;
+      if (s.request === request) s.refreshing = false;
       notify();
+    }
+  }
+
+  let refreshPending = false;
+  let refreshStatusTimer;
+
+  async function refreshLoaded(force) {
+    if (refreshPending) return; // a second click while a refresh runs doesn't start another
+    const status = document.getElementById('pn-refresh-status');
+    const entries = Object.entries(sets);
+    const loaded = entries.filter(([, s]) => s.status !== 'loading' && !s.refreshing);
+    // Refresh all promises every loaded dataset is re-run. While a query is still in flight (a load, a filter change
+    // or a single-dataset refresh), skipping it would report a partial refresh, and re-running it would duplicate it.
+    if (force && loaded.length !== entries.length) {
+      clearTimeout(refreshStatusTimer);
+      if (status) status.textContent = 'Wait for the current queries to finish, then use Refresh all.';
+      return;
+    }
+    if (!loaded.length) return;
+    const buttons = document.querySelectorAll('.pn-refresh');
+    const targets = loaded.map(([id, s]) => [id, s.request]);
+    refreshPending = true;
+    clearTimeout(refreshStatusTimer);
+    buttons.forEach((button) => { button.disabled = true; });
+    if (status) status.textContent = force ? 'Refreshing…' : 'Checking sources…';
+    try {
+      let checks = {};
+      if (!force) {
+        const qs = new URLSearchParams(loaded.map(([id]) => ['check', id]));
+        try {
+          const res = await fetch(`/api/d/${encodeURIComponent(cfg.slug)}/sources?${qs}`, { credentials: 'same-origin' });
+          if (res.ok) checks = (await res.json()).checks || {};
+        } catch (e) { console.warn('Refresh could not verify source changes', e); }
+      }
+      if (status) status.textContent = 'Refreshing…';
+      const results = await Promise.all(targets.map(([id, request]) => {
+        const s = sets[id];
+        if (s.request !== request) return; // the filter changed while the source check was running
+        const sourceAt = checks[id];
+        const unchanged = s.status === 'ok' && !s.stale && s.etag && Number.isFinite(s.queryStartedAt)
+          && Number.isFinite(sourceAt) && sourceAt < s.queryStartedAt;
+        return load(id, unchanged ? 'check' : 'force');
+      }));
+      const counts = ['updated', 'unchanged', 'failed'].map((label) => {
+        const count = results.filter((result) => result === label).length;
+        return count ? `${count} ${label}` : '';
+      }).filter(Boolean);
+      if (status) status.textContent = counts.join(' · ');
+      refreshStatusTimer = setTimeout(() => { if (status) status.textContent = ''; }, 6000);
+    } finally {
+      refreshPending = false;
+      buttons.forEach((button) => { button.disabled = false; });
     }
   }
 
@@ -276,7 +343,7 @@
     const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
     let sources = null;      // dataset id -> {source_note, tables, source_updated_at, live, partial, no_source, static}, from /sources
     let sourcesAsked = false;
-    const openTables = new Set();  // datasets whose "Source tables" list is open in the panel
+    const openTables = new Map();  // explicit open/closed choices survive periodic panel rendering
 
     const when = (sec) => {  // "10:42 am", or "Mon 16 Nov, 10:42 am" when not today (portal time zone)
       const d = new Date(sec * 1000);
@@ -355,8 +422,11 @@
       return e;
     };
 
-    const tableKind = (t) => {
-      if (t.kind === 'managed' && t.updated_at != null) return `changed ${ago(t.updated_at)} (${when(t.updated_at)})`;
+    const tableKind = (t, fetchedAt) => {
+      if (t.kind === 'managed' && t.updated_at != null) {
+        const base = `changed ${ago(t.updated_at)} (${when(t.updated_at)})`;
+        return t.updated_at > fetchedAt ? `${base}, ${window.LakeBoardSourceGroups.span(t.updated_at - fetchedAt)} after your data` : base;
+      }
       if (t.kind === 'live') return t.via ? `live (${t.via})` : 'live, federated';
       if (t.kind === 'external') return 'external, change time not tracked';
       if (t.kind === 'none') return 'reads no table';
@@ -375,6 +445,7 @@
         const dl = el('dl');
         const add = (k, v) => dl.append(el('dt', null, k), el('dd', null, v));
         add('As of', `${when(s.fetchedAt)} (${ago(s.fetchedAt)})`);
+        if (s.dataThrough) add('Data through', s.dataThrough);
         if (s.expiresAt) add('Kept until', when(s.expiresAt));
         add('Type', (KIND[s.cache || meta.cache] || KIND.user)());
         if (meta.source) add('Source', meta.source);
@@ -394,18 +465,29 @@
         if (src && src.source_updated_at != null && (src.live || src.partial)) {
           box.append(el('p', 'pn-fresh-note', 'Some sources are read live or aren’t tracked; the time shown covers the tracked tables only.'));
         }
-        if (tables.length) {  // each table and what is known about it, folded away by default
+        if (tables.length) {
+          const groups = window.LakeBoardSourceGroups.groupSourceTables(tables, s.fetchedAt);
           const det = el('details', 'pn-fresh-tables');
-          det.open = openTables.has(id);  // the panel re-renders every minute; keep what the reader opened
-          det.addEventListener('toggle', () => { if (det.open) openTables.add(id); else openTables.delete(id); });
-          det.append(el('summary', null, `Source tables (${tables.length})`));
-          const ul = el('ul');
-          for (const t of tables) {
-            const li = el('li');
-            li.append(el('span', 'pn-fresh-tname', t.name), document.createTextNode(` — ${tableKind(t)}`));
-            ul.append(li);
+          det.open = openTables.has(id) ? openTables.get(id) : groups.changed.length > 0;
+          // Initialization can emit toggle too; only remember an actual change from the rendered state.
+          let renderedOpen = det.open;
+          det.addEventListener('toggle', () => {
+            if (det.open !== renderedOpen) openTables.set(id, det.open);
+            renderedOpen = det.open;
+          });
+          det.append(el('summary', null, `Source tables (${tables.length})${groups.changed.length ? ` · ${groups.changed.length} changed since your data` : ''}`));
+          for (const [key, title] of [['changed', 'Changed since your data'], ['unchanged', 'Unchanged'], ['untracked', 'Live or not tracked']]) {
+            if (!groups[key].length) continue;
+            det.append(el('h4', 'pn-fresh-group', `${title} (${groups[key].length})`));
+            const ul = el('ul');
+            for (const t of groups[key]) {
+              const li = el('li', key === 'changed' ? 'pn-fresh-changed' : '');
+              li.append(el('span', 'pn-fresh-tname', t.name), document.createTextNode(` — ${tableKind(t, s.fetchedAt)}`));
+              if (key === 'changed') li.append(el('strong', 'pn-fresh-tag', 'new since your data'));
+              ul.append(li);
+            }
+            det.append(ul);
           }
-          det.append(ul);
           box.append(det);
         }
         panel.append(box);
@@ -417,15 +499,15 @@
       if (st && !st.busy && st.cue === 'same') {
         panel.append(el('p', 'pn-fresh-note', st.live
           ? 'No tracked source table has changed since this data was fetched. Live sources are read afresh on every fetch, so Refresh may still bring newer figures from them.'
-          : 'No source table has changed since this data was fetched, so Refresh won’t show anything new.'));
+          : 'The latest source metadata shows no writes since this data was fetched.'));
       }
       if (st && !st.busy && st.cue === 'static') {
-        panel.append(el('p', 'pn-fresh-note', 'These sources never change, so Refresh won’t show anything new.'));
+        panel.append(el('p', 'pn-fresh-note', 'These source tables contain fixed data.'));
       }
       if (st && !st.busy && st.cue === 'newer') {
         panel.append(el('p', 'pn-fresh-note pn-fresh-accent', 'A source table has changed since this data was fetched. Refresh data to see it.'));
       }
-      panel.append(el('p', 'pn-fresh-foot', 'Refresh data re-runs these queries now. For shared data, everyone sees the new result.'));
+      panel.append(el('p', 'pn-fresh-foot', 'Refresh data checks for source changes. Refresh all re-runs the loaded queries.'));
     }
 
     const isOpen = () => btn.getAttribute('aria-expanded') === 'true';
@@ -505,8 +587,9 @@
       draws.define(String(name), spec);
     },
     setLink(name) { history.replaceState(null, '', name ? `#${name}` : location.pathname + location.search); },
-    refresh(id) { if (sets[id]) load(id, true); },
-    refreshAll() { for (const id of Object.keys(sets)) load(id, true); },
+    refresh(id) { if (sets[id]) load(id, 'force'); },
+    refreshChanged() { return refreshLoaded(false); },
+    refreshAll() { return refreshLoaded(true); },
     /* Ask Genie: dash.genieContext(() => ({ Period: 'Year to date', Region: 'North' })) tells Genie what the
      * page is showing (filters that never reach SQL). Called with no argument it returns the current pairs. */
     genieContext(fn) {
