@@ -190,12 +190,13 @@ jobs:
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: python scripts/build_sources_map.py --env "$TARGET"
 
+      # Updates the app when it already exists but this service principal's bundle state doesn't know it (decision 0020).
       - name: Deploy bundle
         if: steps.setup.outputs.ready == 'true'
         env:
           DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-        run: databricks bundle deploy -t "$TARGET"
+        run: bash scripts/deploy_bundle.sh "$TARGET"
 
       - name: Start the app with the new code
         if: steps.setup.outputs.ready == 'true'
