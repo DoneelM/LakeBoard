@@ -104,6 +104,10 @@ targets:
 and `src/environments.local.yml` sets the host the app uses to know it is dev:
 `environments: {dev: {host: <your-workspace-host>}}` (no https://).
 
+The GitHub Actions deploy does this for you: it writes both files from the `DATABRICKS_HOST` and
+`DATABRICKS_WAREHOUSE_ID` variables of the GitHub environment, so a workspace never has to be committed
+([docs/PROMOTION.md](docs/PROMOTION.md)).
+
 **4. Add your own dashboard:**
 
 ```bash

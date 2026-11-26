@@ -15,8 +15,9 @@ can be one workspace (a Databricks Free Edition workspace is enough to try it); 
 Two example pipelines do all three, so pick the one for your git host:
 
 - **GitHub Actions:** `.github/workflows/deploy.yml`. It signs in with a service principal's OAuth secret
-  (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) or GitHub OIDC, and reads `DATABRICKS_HOST` from the
-  GitHub environment (`dev`, `test` or `prod`).
+  (`DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) or GitHub OIDC, and reads `DATABRICKS_HOST` and
+  `DATABRICKS_WAREHOUSE_ID` from the GitHub environment (`dev`, `test` or `prod`). It writes the gitignored
+  `databricks.local.yml` and `src/environments.local.yml` from them, so no workspace is committed.
 - **Azure DevOps:** `azure-pipelines.yml` with `pipelines/deploy-steps.yml`. It signs in through the
   `databricks-service-connection` service connection and reads `DATABRICKS_HOST` from the `lakeboard-dev-vars`,
   `lakeboard-test-vars` and `lakeboard-prod-vars` variable groups. All of these names are placeholders.
@@ -50,7 +51,7 @@ never rides along to test or prod.
 |---|---|
 | Any PR into `develop`, `release` or `main` | Credential-free checks only: `scripts/check.py --static` (including the page and shared-SQL reviews) and `pytest`. No service connection, variable group or secret is used |
 | Push (merge) into one of the three branches | The same checks, then for that environment: install the pinned, checksum-verified Databricks CLI, `bundle validate`, every dataset query with `LIMIT 0` against its catalogs, the source map for the freshness label, `bundle deploy`, and `bundle run portal` (starts the app with the new code) |
-| After a dev or test deploy | The app is stopped again to save cost. To keep it up, run the pipeline by hand with "keep running" ticked (`keep_running` in GitHub Actions, "Leave the dev/test app running" in Azure DevOps) |
+| After a test deploy (and a dev deploy in Azure DevOps) | The app is stopped again to save cost. To keep it up, run the pipeline by hand with "keep running" ticked (`keep_running` in GitHub Actions, "Leave the dev/test app running" in Azure DevOps). In GitHub Actions the dev app (`develop`) and prod always stay running |
 | Two runs for the same environment overlap | The second waits until the first has finished, then deploys its own commit (GitHub: a `concurrency` group per environment; Azure DevOps: `lockBehavior: sequential`). Runs for different environments don't wait for each other |
 
 A deployment fails before anything changes if a query refers to a view that doesn't exist yet in that
@@ -72,7 +73,7 @@ Removing the line is a normal change that goes through the same three PRs.
   and the hosts under `environments:` in `src/environments.yml`.
 - A service principal for deploys, added to each workspace. It needs permission to create apps, `CAN USE` on the
   SQL warehouse, and `SELECT` on the views the dashboards read (for the `LIMIT 0` check).
-- **GitHub:** create the environments `dev`, `test` and `prod` with the `DATABRICKS_HOST` variable and the client
+- **GitHub:** create the environments `dev`, `test` and `prod` with the `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variables and the client
   id and secret (or an OIDC federation policy). Add required reviewers on `prod` if a person should approve each
   prod deploy.
 - **Azure DevOps:** create the pipeline from `azure-pipelines.yml` and authorise it to use the service connection
