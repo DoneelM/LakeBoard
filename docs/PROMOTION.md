@@ -50,7 +50,7 @@ never rides along to test or prod.
 | When | What runs |
 |---|---|
 | Any PR into `develop`, `release` or `main` | Credential-free checks only: `scripts/check.py --static` (including the page and shared-SQL reviews) and `pytest`. No service connection, variable group or secret is used |
-| Push (merge) into one of the three branches | The same checks, then for that environment: install the pinned, checksum-verified Databricks CLI, `bundle validate`, every dataset query with `LIMIT 0` against its catalogs, the source map for the freshness label, `bundle deploy`, and `bundle run portal` (starts the app with the new code) |
+| Push (merge) into one of the three branches | The same checks, then for that environment: install the pinned, checksum-verified Databricks CLI, `bundle validate`, every dataset query with `LIMIT 0` against its catalogs, the source map for the freshness label, `bundle deploy` (updating the app if it already exists, decision 0020), and `bundle run portal` (starts the app with the new code) |
 | After a test deploy (and a dev deploy in Azure DevOps) | The app is stopped again to save cost. To keep it up, run the pipeline by hand with "keep running" ticked (`keep_running` in GitHub Actions, "Leave the dev/test app running" in Azure DevOps). In GitHub Actions the dev app (`develop`) and prod always stay running |
 | Two runs for the same environment overlap | The second waits until the first has finished, then deploys its own commit (GitHub: a `concurrency` group per environment; Azure DevOps: `lockBehavior: sequential`). Runs for different environments don't wait for each other |
 

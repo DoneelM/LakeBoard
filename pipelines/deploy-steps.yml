@@ -72,7 +72,8 @@ steps:
     DATABRICKS_HOST: $(DATABRICKS_HOST)
     DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
 
-- script: databricks bundle deploy -t ${{ parameters.target }}
+# Updates the app when it already exists but this service principal's bundle state doesn't know it (decision 0020).
+- script: bash scripts/deploy_bundle.sh ${{ parameters.target }}
   displayName: Deploy Bundle
   env:
     DATABRICKS_HOST: $(DATABRICKS_HOST)

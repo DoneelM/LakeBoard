@@ -96,19 +96,29 @@ to start it again: the first person to open the portal does. Stopping empties th
 
 ### First CI deploy to an app that already exists
 
-App names are unique in a workspace, so `bundle deploy` fails with "An app with the same name already exists" for a
-`lakeboard-dev` that was created by hand. Bind it to the bundle once, **as the CI service principal** (the one whose
-client id and secret are in the GitHub `dev` environment), so the bundle state lands under that principal's
-`root_path`. The principal needs `CAN MANAGE` on the app. A person with those credentials runs, from a checkout:
+App names are unique in a workspace, and each identity that deploys keeps its own bundle state under its own
+`root_path`. So when `lakeboard-dev`, `lakeboard-test` or `lakeboard` was created by hand or deployed by a person, the
+CI service principal's first `bundle deploy` fails with "An app with the same name already exists".
+
+The pipelines handle this (`scripts/deploy_bundle.sh`, decision 0020): on that exact error they bind the existing app
+to the bundle and deploy again, so the deploy updates it. You'll see the first error in the log, then a line saying
+the app is being bound. The principal needs `CAN MANAGE` on the app; if it doesn't have it, the step fails and says
+so. Grant it on the app (Compute > Apps > the app > Permissions) and run the pipeline again.
+
+Before the first such deploy:
+- **Settings the bundle doesn't declare** (for example `budget_policy_id`): copy them into the bundle, or the deploy
+  can fail or drop them.
+- **Grants made by hand on the app**: the bundle's `permissions` take over, so add any you want to keep to
+  `resources/portal.app.yml` or the target in `databricks.yml`.
+- **Stop deploying that target from a laptop.** Two bundle states managing one app overwrite each other, and a
+  `bundle destroy` from either deletes it. For a personal app, set your own `app_name` in `databricks.local.yml`.
+
+To bind by hand instead (as the CI service principal, with `databricks.local.yml` and `src/environments.local.yml` in
+place so the target points at the same workspace):
 
 ```bash
 databricks bundle deployment bind portal lakeboard-dev --target dev --auto-approve
 ```
-
-Do this with `databricks.local.yml` and `src/environments.local.yml` in place (README "Keep your workspace out of
-git"), so the target points at the same workspace. After that every push to `develop` deploys to that app. If the
-app has settings the bundle doesn't declare (for example `budget_policy_id`), copy them into the bundle first, or the
-deploy can fail.
 
 ## How data refreshes
 

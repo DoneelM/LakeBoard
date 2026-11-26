@@ -276,7 +276,8 @@ Two example pipelines do the same thing; use whichever matches your git host.
   and shared-SQL reviews (`src/reviewed_pages.yml`, `src/shared_cache.yml`; decision 0018).
 - **Push to `develop` / `release` / `main`:** install a pinned, checksum-verified Databricks CLI,
   `databricks bundle validate`, run every dataset with `LIMIT 0` against that environment's
-  catalogs, build the source map, `databricks bundle deploy`, then `databricks bundle run portal`. Test is
+  catalogs, build the source map, `databricks bundle deploy` (through `scripts/deploy_bundle.sh`, which binds an
+  app that already exists, decision 0020), then `databricks bundle run portal`. Test is
   stopped afterwards (GitHub Actions; Azure DevOps also stops dev). Deploys to one environment run one at a time.
 - **GitHub Actions** (`.github/workflows/deploy.yml`): GitHub environments `dev`, `test` and `prod`, each with a
   `DATABRICKS_HOST` and `DATABRICKS_WAREHOUSE_ID` variable and a service principal's OAuth secret
