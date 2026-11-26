@@ -51,6 +51,22 @@ def test_unexpired_identities_are_kept(monkeypatch, clock, identities):
     assert {u.email for _, u in auth._identities.values()} == {"alice", "bob"}
 
 
+def test_identity_that_expires_while_waiting_for_the_lock_is_not_served(monkeypatch, clock, identities):
+    # Revoked group access must not be served if the entry expires after the
+    # pre-lock clock read and before the guard is held.
+    me = SimpleNamespace(id="alice", user_name="alice", groups=[SimpleNamespace(display="editors")])
+    monkeypatch.setattr(auth, "WorkspaceClient", lambda **kw: SimpleNamespace(current_user=SimpleNamespace(me=lambda: me)))
+    req = SimpleNamespace(headers={"x-forwarded-access-token": "alice"})
+    assert "editors" in auth.current_user(req).groups
+    me.groups = []
+    monkeypatch.setattr(
+        auth.time,
+        "monotonic",
+        lambda: clock[0] + (auth._IDENTITY_TTL + 1 if auth._identities_guard.locked() else 0),
+    )
+    assert auth.current_user(req).groups == frozenset()
+
+
 def test_concurrent_eviction_of_one_expired_identity_does_not_raise(monkeypatch, clock, identities):
     from concurrent.futures import ThreadPoolExecutor
     sign_in(monkeypatch, "alice")
