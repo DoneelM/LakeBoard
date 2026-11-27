@@ -25,7 +25,7 @@
 .ct-split-row { display: grid; grid-template-columns: 4.5rem 1fr 3.5rem; gap: 10px; align-items: center; font-size: 13px; }
 .ct-split-row b { text-align: right; font-variant-numeric: tabular-nums; }
 .ct-split-track { display: flex; height: 22px; background: color-mix(in srgb, var(--cds-chart-grid) 70%, transparent); overflow: hidden; }
-.ct-split-track span { display: block; height: 100%; transition: width .9s var(--cds-ease-out); }
+.ct-split-track span { display: block; height: 100%; }
 .ct-airport { background: linear-gradient(90deg, var(--signal-warn), color-mix(in srgb, var(--signal-warn) 70%, var(--accent))); }
 .ct-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 10px; margin: 4px 0 14px; }
 .ct-vs div { border-left: 3px solid var(--color-border-line); padding-left: 10px; }
@@ -288,11 +288,17 @@
     const wk = pace.data.filter((r) => r.part === 'weekday' && num(r.trips) >= 30).map((r) => ({ hr: num(r.hour), mph: num(r.miles) / num(r.hours), trips: num(r.trips) }));
     if (!wk.length) { el.replaceChildren(); el.className = ''; return; }
     const fast = d3.greatest(wk, (r) => r.mph), slow = d3.least(wk, (r) => r.mph), busy = d3.greatest(wk, (r) => r.trips);
+    const title = fast.hr === slow.hr
+      ? `Weekday taxis move at ${fmt.num(fast.mph, 0)} mph at ${clock(fast.hr)}.`
+      : `Weekday taxis move at ${fmt.num(fast.mph, 0)} mph at ${clock(fast.hr)} and ${fmt.num(slow.mph, 0)} mph at ${clock(slow.hr)}.`;
+    const rhythm = busy.hr === slow.hr
+      ? `the busiest weekday hour is ${clock(busy.hr)}, when the city is at its slowest`
+      : `the busiest weekday hour is ${clock(busy.hr)}; the slowest is ${clock(slow.hr)}`;
     kit.insight(el, {
       eyebrow: 'The pattern',
-      title: `Weekday taxis move at ${fmt.num(fast.mph, 0)} mph at ${clock(fast.hr)} and ${fmt.num(slow.mph, 0)} mph at ${clock(slow.hr)}.`,
-      body: `Traffic, not distance, sets the pace: the busiest weekday hour is ${clock(busy.hr)}, when the city is at its slowest. Pick “Storm week” to see the day New York stopped.`,
-      stats: [{ value: `${fmt.num(fast.mph / slow.mph, 1)}×`, label: 'faster before dawn' }, { value: clock(busy.hr), label: 'busiest weekday hour' }],
+      title,
+      body: `Traffic, not distance, sets the pace: ${rhythm}. Pick “Storm week” to see the day New York stopped.`,
+      stats: [{ value: `${fmt.num(fast.mph / slow.mph, 1)}×`, label: `faster at ${clock(fast.hr)}` }, { value: clock(busy.hr), label: 'busiest weekday hour' }],
     });
   }
 
@@ -556,8 +562,15 @@
       }).on('pointerleave', () => tip.hide());
     });
     el.replaceChildren(svg.node());
-    const lo = num(rows[0].median), hi = num(rows[rows.length - 1].median);
-    if (lo > 0 && rows.length > 1) document.getElementById('ct-bands-title').textContent = `Fares by distance: a median ${fmt.money(lo, 2)} under a mile, ${fmt.money(hi, 2)} past ten`;
+    // band_order 1 and 5, not first/last: empty bands are dropped, so those rows may be missing.
+    const under = rows.find((r) => num(r.band_order) === 1);
+    const over = rows.find((r) => num(r.band_order) === 5);
+    const lo = under ? num(under.median) : null, hi = over ? num(over.median) : null;
+    const bits = [];
+    if (lo > 0) bits.push(`a median ${fmt.money(lo, 2)} under a mile`);
+    if (hi > 0) bits.push(`${bits.length ? '' : 'a median '}${fmt.money(hi, 2)} past ten`);
+    document.getElementById('ct-bands-title').textContent = bits.length
+      ? `Fares by distance: ${bits.join(', ')}` : 'Fares by trip distance';
   }
 
   // ---- Day by day
