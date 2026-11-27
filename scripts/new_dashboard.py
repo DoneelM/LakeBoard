@@ -25,9 +25,9 @@ datasets:
 SQL = """-- TODO: one SELECT/WITH statement. Write tables as catalog.schema.table, using the prod catalog name
 -- (an allowed catalog in src/environments.yml). Use :name parameters and declare them under params in dashboard.yml.
 -- This example reads the built-in samples catalog.
-SELECT date_format(o_orderdate, 'yyyy-MM') AS month, round(sum(o_totalprice), 0) AS revenue
-FROM samples.tpch.orders
-WHERE o_orderdate >= DATE'1997-01-01'
+SELECT date_format(tpep_pickup_datetime, 'yyyy-MM') AS month, round(sum(fare_amount), 0) AS revenue
+FROM samples.nyctaxi.trips
+WHERE tpep_pickup_datetime >= DATE'2016-01-01'
 GROUP BY 1
 ORDER BY 1
 """
