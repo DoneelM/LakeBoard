@@ -14,10 +14,12 @@ tables and `tpch` are uniform.
 
 ## Decision
 - **Kit** (`src/static/kit.js`, `kit.css`), for every dashboard: tile numbers count up when they change, tiles take
-  `spark` and `delta`; `kit.line` adds an area under one line, hover tooltips, draw-in, `band`, `marks`, `spans`,
-  hourly and numeric axes and `tip`; bars grow from their last length; new `kit.tip` and `kit.insight`; cards and
-  new tiles rise in once. Motion runs only when values change (never on a resize redraw) and never under
-  `prefers-reduced-motion`. Existing calls keep working unchanged.
+  `spark`; `kit.line` shades the area under a single-series line by default (`opts.area ?? opts.series.length === 1`)
+  and adds hover tooltips, draw-in, `band`, `marks`, `spans`, hourly and numeric axes and `tip`; bars grow from
+  their last length; new `kit.tip` and `kit.insight`; cards and new tiles rise in once. Motion runs only when
+  values change (never on a resize redraw) and never under `prefers-reduced-motion`: `still()` in `kit.js`, and the
+  entrance and fade queries in `kit.css`. Existing calls keep working; the new default shade is visible on the
+  single-series trend charts that already used `kit.line`.
 - **City Trips** is the flagship: a headline worked out from the data (`kit.insight`), card titles that state the
   finding, three new datasets (`hourly` as an unfiltered baseline, `pace`, `flows`), the blizzard hour by hour
   with the travel ban, speed by hour, flows between areas, airport runs and date presets.
@@ -47,7 +49,7 @@ tables and `tpch` are uniform.
   the theme and the Content-Security-Policy.
 
 ## Changing it later
-Motion: `still()` in `kit.js`. The baseline: `hourly` in `src/dashboards/city-trips/dashboard.yml`. Events:
+Motion: `still()` in `kit.js`, and the entrance and fade motion in `kit.css` (`@media (prefers-reduced-motion)`). The baseline: `hourly` in `src/dashboards/city-trips/dashboard.yml`. Events:
 `EVENTS` in `src/dashboards/city-trips/index.html`.
 
 ## Links

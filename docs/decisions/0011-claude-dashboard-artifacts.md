@@ -53,7 +53,7 @@ A dashboard can say `page: artifact` in `dashboard.yml` (default `page: lakeboar
   instead, as strings like SQL results, and the freshness label says "snapshot preview". The snapshot is
   `{"columns": [...], "rows": [[...]]}` or a list of row objects. `src/dashboards/*/snapshots/` is gitignored:
   it holds business data.
-- **Sample:** `src/dashboards/artifact-demo/`.
+- **Sample:** none in `src/dashboards/` now. The runtime is covered by `tests/test_artifact_runtime.py`, which builds artifact pages in a temporary folder (see Update below).
 
 ## Why
 - People keep building in Claude, where they are quick. The data team hosts the result without a rewrite, so
@@ -100,4 +100,4 @@ was removed with the other TPC-H sample (decision 0021). The runtime is unchange
 artifact (skill `import-claude-dashboard`) becomes the working example.
 
 ## Links
-`src/dashboards/artifact-demo/`; `tests/test_artifact_runtime.py`; `docs/DESIGN.md` (Page runtime).
+`tests/test_artifact_runtime.py`; `docs/DESIGN.md` (Page runtime).
