@@ -137,9 +137,6 @@
 .kit-tile strong { font-size: clamp(22px, 2.2vw, 28px); font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .kit-tile-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-fg-muted); }
 .kit-tile-note { font-size: 12px; color: var(--color-fg-muted); }
-.kit-tile-delta { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.kit-tile-delta span { font-weight: 500; color: var(--color-fg-muted); }
-.kit-tile-delta.kit-good { color: var(--color-ok); } .kit-tile-delta.kit-bad { color: var(--color-bad); } .kit-tile-delta.kit-flat { color: var(--color-fg-muted); }
 .kit-tile.kit-has-spark { padding-bottom: 40px; }
 .kit-spark { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 34px; }
 .kit-spark-line { fill: none; stroke: var(--accent); stroke-width: 1.75; vector-effect: non-scaling-stroke; }

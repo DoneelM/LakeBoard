@@ -111,7 +111,7 @@ dashboard's own content. Two libraries are always available:
 | `kit.h('div', {class: 'x'}, 'text', child)` | Builds an element. Values are always inserted as text, never as HTML |
 | `kit.ready(el, ...datasets)` | Shows "Loading…" or the error in `el` and returns `false` until every dataset is ready |
 | `kit.filters(el, specs, onChange)` | Filter bar: `select`, `multi`, `date`, `search`. Returns `{values(), set(id, v), options(id, list)}` |
-| `kit.tiles(el, [{label, value, note, tone, spark, delta}])` | KPI tiles. The number in `value` counts up when it changes. `spark: [numbers]` draws a small trend under it; `delta: {value: 0.12, label: 'vs 2001', good: 'up' \| 'down'}` adds a green or red change |
+| `kit.tiles(el, [{label, value, note, tone, spark}])` | KPI tiles. The number in `value` counts up when it changes. `spark: [numbers]` draws a small trend under it |
 | `kit.insight(el, {eyebrow, title, body, tone, stats: [{value, label}]})` | A headline banner: the one thing the data says. Write the title from the data, so it stays true for any filter |
 | `kit.table(el, {columns, rows, csv: 'file-name', onRow})` | Sortable table with a row count and CSV download |
 | `kit.bars(el, {rows, label, value, fmt, color(row)})` | Ranked horizontal bars that grow to their new length when the values change |

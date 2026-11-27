@@ -139,9 +139,8 @@
     return svg.node();
   }
 
-  /* KPI tiles. items: [{label, value, note, tone: 'ok' | 'warn' | 'bad', spark: [numbers], delta: {value, label, good}}]
-   * value is already formatted; its number counts up when it changes. spark draws a small trend under the value.
-   * delta.value is a fraction (0.12 = +12%); delta.good is 'up' (default) or 'down', which direction is good news. */
+  /* KPI tiles. items: [{label, value, note, tone: 'ok' | 'warn' | 'bad', spark: [numbers]}]
+   * value is already formatted; its number counts up when it changes. spark draws a small trend under the value. */
   function tiles(el, items) {
     el = mount(el);
     el.classList.add('kit-tiles');
@@ -159,13 +158,7 @@
       if (value.dataset.text !== String(t.value)) countUp(value, t.value, prev);
       value.dataset.text = String(t.value);
       now.set(t.label, n ? n.value : null);
-      for (const old of tile.querySelectorAll('.kit-tile-delta, .kit-tile-note, .kit-spark')) old.remove();
-      const dv = t.delta ? num(t.delta.value) : null;
-      if (dv !== null) {
-        const up = dv >= 0, good = (t.delta.good || 'up') === 'none' ? 'flat' : up === ((t.delta.good || 'up') === 'up') ? 'good' : 'bad';
-        tile.append(h('span', { class: `kit-tile-delta kit-${good}` }, `${up ? '▲' : '▼'} ${Math.abs(dv * 100).toFixed(Math.abs(dv) < 0.1 ? 1 : 0)}%`,
-          t.delta.label ? h('span', null, ' ' + t.delta.label) : null));
-      }
+      for (const old of tile.querySelectorAll('.kit-tile-note, .kit-spark')) old.remove();
       if (t.note) tile.append(h('span', { class: 'kit-tile-note' }, t.note));
       const s = t.spark ? spark(t.spark) : null;
       if (s) tile.append(s);
