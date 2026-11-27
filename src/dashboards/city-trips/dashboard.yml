@@ -1,5 +1,5 @@
 title: City Trips
-description: Taxi trips in New York City, Jan–Feb 2016 - volumes, fares, busy hours and busy ZIP codes. Built on the samples catalog every workspace has.
+description: New York taxi trips, Jan–Feb 2016 - the blizzard that stopped the city, rush-hour speed, where trips go and airport runs. Built on the samples catalog every workspace has.
 owner: Samples
 section: Samples
 order: 10
@@ -47,6 +47,33 @@ datasets:
     title: Fares by distance
     description: Trip count and fare percentiles (10th, 25th, median, 75th, 90th) for five distance bands.
     sql: sql/bands.sql
+    cache: shared
+    cache_ttl: 24h
+    warm_at: startup
+    warm:
+      - {date_from: "2016-01-01", date_to: "2016-02-29"}
+  hourly:
+    title: Trips by hour, whole sample
+    description: Trips in each pickup hour of the whole sample (New York time), whatever the dates picked. The page's baseline for a normal day and hour.
+    sql: sql/hourly.sql
+    cache: shared
+    cache_ttl: 24h
+    warm_at: startup
+    warm:
+      - {}               # no parameters: one result for every date range
+  pace:
+    title: Speed by hour
+    description: Trips, miles and hours driven per pickup hour, weekdays and weekends, for the average speed. Meter errors left out.
+    sql: sql/pace.sql
+    cache: shared
+    cache_ttl: 24h
+    warm_at: startup
+    warm:
+      - {date_from: "2016-01-01", date_to: "2016-02-29"}
+  flows:
+    title: Trips between areas
+    description: Trips, fares and miles from each pickup area to each dropoff area (boroughs, the three airports, outside NYC).
+    sql: sql/flows.sql
     cache: shared
     cache_ttl: 24h
     warm_at: startup

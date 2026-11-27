@@ -66,3 +66,4 @@ this repository.
 | [0018](0018-publishing-guards.md) | Publishing guards: reviewed pages and shared SQL, groups for app data, credential-free PR checks | Accepted |
 | [0019](0019-fail-closed-host-resolution.md) | Fail closed when the workspace host is unmatched or, in a deployed app, empty | Accepted |
 | [0020](0020-deploy-updates-an-existing-app.md) | Deploy updates an app that already exists | Accepted |
+| [0021](0021-kit-motion-and-city-trips-flagship.md) | Dashboards that lead with a finding: kit upgrade, City Trips flagship, TPC-H samples removed | Accepted |

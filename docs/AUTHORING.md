@@ -111,16 +111,20 @@ dashboard's own content. Two libraries are always available:
 | `kit.h('div', {class: 'x'}, 'text', child)` | Builds an element. Values are always inserted as text, never as HTML |
 | `kit.ready(el, ...datasets)` | Shows "Loading…" or the error in `el` and returns `false` until every dataset is ready |
 | `kit.filters(el, specs, onChange)` | Filter bar: `select`, `multi`, `date`, `search`. Returns `{values(), set(id, v), options(id, list)}` |
-| `kit.tiles(el, [{label, value, note, tone}])` | KPI tiles |
+| `kit.tiles(el, [{label, value, note, tone, spark}])` | KPI tiles. The number in `value` counts up when it changes. `spark: [numbers]` draws a small trend under it |
+| `kit.insight(el, {eyebrow, title, body, tone, stats: [{value, label}]})` | A headline banner: the one thing the data says. Write the title from the data, so it stays true for any filter |
 | `kit.table(el, {columns, rows, csv: 'file-name', onRow})` | Sortable table with a row count and CSV download |
-| `kit.bars(el, {rows, label, value, fmt})` | Ranked horizontal bars |
-| `kit.line(el, {rows, x, series: [{key, label}], fmt})` | Lines over time |
+| `kit.bars(el, {rows, label, value, fmt, color(row)})` | Ranked horizontal bars that grow to their new length when the values change |
+| `kit.line(el, {rows, x, series: [{key, label, color, dash}], fmt, area, band, marks, spans, tip, xType})` | Lines over time (`x` as `yyyy-MM`, `yyyy-MM-dd` or `yyyy-MM-dd HH:mm`), or over numbers with `xType: 'number'` and `xFmt`. Hover shows every value at that point. `band: {low, high, label}` shades a range (a normal day, a target); `marks: [{x, label, note}]` labels events; `spans: [{from, to, label}]` shades a stretch of time; `tip(row)` adds lines to the tooltip. Lines draw in when the data changes |
+| `kit.tip(el)` | A tooltip for your own d3 charts: `.show(x, y, ...elements)` and `.hide()`, in pixels from `el`'s corner |
 | `kit.map(el, {tooltip(p), onClick(p), dark})` | Point map on OpenStreetMap (needs `libs: [leaflet]`). `.set(points, {lines})` takes `{lat, lon, color, label, …}`; a `label` draws a numbered pin, and `lines: [{path, color}]` draws routes |
 | `kit.colour(i)` | The i-th category colour |
 | `kit.csv(name, columns, rows)` | Download rows as CSV |
 | `kit.xlsx(name, sheets)` | Download an Excel file for people who edit and print it. `sheets: [{name, columns: [{key, label, width, link}], rows}]`. Returns a promise |
 
-CSS classes: `kit-page` (page padding), `kit-card`, `kit-grid`, `kit-btn`, `kit-sub`. Colours come from the theme
+CSS classes: `kit-page` (page padding), `kit-eyebrow` (small label above the title), `kit-card`, `kit-card-sub` (a line under a card's `h2`), `kit-grid`, `kit-btn`, `kit-sub`.
+Motion (counting numbers, drawing lines, growing bars, cards rising in) runs only when values change, never on a
+resize, and not at all for people whose system asks for reduced motion. Colours come from the theme
 variables at the top of `src/static/shell.css` (`--color-fg`, `--color-fg-muted`, `--color-bg`, `--color-panel`,
 `--color-border-line`, `--brand`, `--accent`, `--chart-1` to `--chart-8`), which switch between light and dark
 automatically. `dash.colors` holds the chart colours. `d3` (version 7) is available for custom charts.

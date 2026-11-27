@@ -5,7 +5,7 @@ WITH banded AS (
     CASE WHEN trip_distance < 1 THEN 1 WHEN trip_distance < 2 THEN 2 WHEN trip_distance < 5 THEN 3
          WHEN trip_distance < 10 THEN 4 ELSE 5 END AS band_order
   FROM samples.nyctaxi.trips
-  WHERE tpep_pickup_datetime >= :date_from AND tpep_pickup_datetime < date_add(:date_to, 1)
+  WHERE tpep_pickup_datetime >= :date_from AND tpep_pickup_datetime < date_add(:date_to, 1) AND trip_distance IS NOT NULL
 )
 SELECT
   band_order,

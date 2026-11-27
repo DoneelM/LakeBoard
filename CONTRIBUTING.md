@@ -21,6 +21,7 @@ Thanks for helping. Bug reports, docs fixes, new sample dashboards and framework
    python -m pytest -q
    PORTAL_ENV=dev python -m pytest -q
    python scripts/check.py --static
+   node --test "tests/js/*.test.mjs"
    ```
 
    Optional browser smoke test (stubbed data, no workspace):

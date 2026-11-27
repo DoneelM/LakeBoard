@@ -86,12 +86,118 @@
     };
   }
 
-  /* KPI tiles. items: [{label, value, note, tone: 'ok' | 'warn' | 'bad'}] (value already formatted). */
+  /* ---- Motion: numbers count up and charts draw in when their values change, never on a plain redraw (resize),
+   * and never for people who ask for less motion. ---- */
+  const still = () => typeof matchMedia !== 'function' || typeof requestAnimationFrame !== 'function'
+    || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const SEP = (() => {
+    try {
+      const parts = new Intl.NumberFormat(LOCALE).formatToParts(12345.6);
+      return { g: (parts.find((p) => p.type === 'group') || {}).value || ',', d: (parts.find((p) => p.type === 'decimal') || {}).value || '.' };
+    } catch (e) { return { g: ',', d: '.' }; }
+  })();
+  const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const NUM_RE = new RegExp(`\\d{1,3}(?:${reEsc(SEP.g)}\\d{3})+(?:${reEsc(SEP.d)}\\d+)?|\\d+(?:${reEsc(SEP.d)}\\d+)?`, 'g');
+  /* The one number in a formatted value ("$25.2m", "1,137,325", "21.5%"), so it can count up. null when there is no
+   * number, more than one ("1992–1997") or a word before it ("Jan 2016"): those are shown as they are. */
+  function numberIn(text) {
+    const s = String(text ?? '');
+    const all = s.match(NUM_RE) || [];
+    if (all.length !== 1) return null;
+    const at = s.search(NUM_RE), raw = all[0];
+    const pre = s.slice(0, at);
+    if (/\p{L}/u.test(pre)) return null;
+    const [whole, frac = ''] = raw.split(SEP.d);
+    return { pre, post: s.slice(at + raw.length), value: +(whole.split(SEP.g).join('') + (frac ? '.' + frac : '')), dp: frac.length, group: raw.includes(SEP.g) };
+  }
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  /* Sets node's text to `text`, counting its number up from `from` (a number) when there is motion. */
+  function countUp(node, text, from) {
+    const n = numberIn(text);
+    if (node.__kitAnim) cancelAnimationFrame(node.__kitAnim);
+    if (!n || from === null || from === undefined || from === n.value || still()) { node.textContent = text; return; }
+    const show = (v) => n.pre + v.toLocaleString(LOCALE, { minimumFractionDigits: n.dp, maximumFractionDigits: n.dp, useGrouping: n.group }) + n.post;
+    const t0 = performance.now(), ms = 900;
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / ms);
+      node.textContent = t < 1 ? show(from + (n.value - from) * ease(t)) : text;
+      node.__kitAnim = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    node.__kitAnim = requestAnimationFrame(step);
+  }
+
+  /* Small trend line for a tile: values in order, oldest first. */
+  function spark(values) {
+    const v = (values || []).map(num).filter((x) => x !== null);
+    if (v.length < 2) return null;
+    const lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+    const pts = v.map((x, i) => [(i / (v.length - 1)) * 100, 26 - ((x - lo) / span) * 22]);
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(2) + ',' + p[1].toFixed(2)).join('');
+    const svg = d3.create('svg').attr('class', 'kit-spark').attr('viewBox', '0 0 100 28').attr('preserveAspectRatio', 'none').attr('aria-hidden', 'true');
+    svg.append('path').attr('class', 'kit-spark-area').attr('d', d + 'L100,28L0,28Z');
+    svg.append('path').attr('class', 'kit-spark-line').attr('d', d);
+    return svg.node();
+  }
+
+  /* KPI tiles. items: [{label, value, note, tone: 'ok' | 'warn' | 'bad', spark: [numbers]}]
+   * value is already formatted; its number counts up when it changes. spark draws a small trend under the value. */
   function tiles(el, items) {
     el = mount(el);
     el.classList.add('kit-tiles');
-    el.replaceChildren(...items.map((t) => h('div', { class: 'kit-tile' + (t.tone ? ' kit-' + t.tone : '') },
-      h('span', { class: 'kit-tile-label' }, t.label), h('strong', null, t.value), t.note ? h('span', { class: 'kit-tile-note' }, t.note) : null)));
+    const before = el.__kitTiles || new Map();
+    const same = el.children.length === items.length && items.every((t, i) => el.children[i].dataset.label === String(t.label));
+    if (!same) el.replaceChildren(...items.map((t) => h('div', { class: 'kit-tile kit-enter', 'data-label': t.label },
+      h('span', { class: 'kit-tile-label' }, t.label), h('strong', { class: 'kit-tile-value' }))));
+    const now = new Map();
+    items.forEach((t, i) => {
+      const tile = el.children[i];
+      tile.className = 'kit-tile' + (same ? '' : ' kit-enter') + (t.tone ? ' kit-' + t.tone : '') + (t.spark ? ' kit-has-spark' : '');
+      const value = tile.querySelector('.kit-tile-value');
+      const prev = before.has(t.label) ? before.get(t.label) : 0;
+      const n = numberIn(t.value);
+      if (value.dataset.text !== String(t.value)) countUp(value, t.value, prev);
+      value.dataset.text = String(t.value);
+      now.set(t.label, n ? n.value : null);
+      for (const old of tile.querySelectorAll('.kit-tile-note, .kit-spark')) old.remove();
+      if (t.note) tile.append(h('span', { class: 'kit-tile-note' }, t.note));
+      const s = t.spark ? spark(t.spark) : null;
+      if (s) tile.append(s);
+    });
+    el.__kitTiles = now;
+  }
+
+  /* A floating tooltip inside `host` (charts use it on hover). Returns {show(x, y, ...content), hide()}; x and y are
+   * pixels from the host's top-left corner. Content is elements or text, never HTML. */
+  function tip(host) {
+    host = mount(host);
+    host.classList.add('kit-tip-host');
+    let box = host.querySelector(':scope > .kit-tip');
+    if (!box) { box = h('div', { class: 'kit-tip', role: 'tooltip', hidden: true }); host.append(box); }
+    return {
+      show(x, y, ...content) {
+        box.replaceChildren(...content.flat().filter((c) => c !== null && c !== undefined));
+        box.hidden = false;
+        const W = host.clientWidth, bw = box.offsetWidth, bh = box.offsetHeight;
+        const left = x + 14 + bw > W ? Math.max(0, x - 14 - bw) : x + 14;
+        box.style.left = left + 'px';
+        box.style.top = Math.max(0, y - bh - 10) + 'px';
+      },
+      hide() { box.hidden = true; },
+    };
+  }
+
+  /* Headline for the top of a page: the one thing the data says. opts: {eyebrow, title, body, tone: 'ok' | 'warn' | 'bad',
+   * stats: [{value, label}]}. Write it from the data on the page, so it is true for whatever the filters show. */
+  function insight(el, opts) {
+    el = mount(el);
+    el.className = 'kit-insight' + (opts.tone ? ' kit-' + opts.tone : '');
+    el.replaceChildren(
+      h('div', { class: 'kit-insight-text' },
+        opts.eyebrow ? h('span', { class: 'kit-insight-eyebrow' }, opts.eyebrow) : null,
+        h('strong', { class: 'kit-insight-title' }, opts.title),
+        opts.body ? h('p', null, opts.body) : null),
+      opts.stats && opts.stats.length ? h('div', { class: 'kit-insight-stats' }, opts.stats.map((s) =>
+        h('div', null, h('strong', null, s.value), h('span', null, s.label)))) : null);
   }
 
   // Cells whose first character, or first non-whitespace character, is = + - @ TAB CR LF or full-width ＝＋－＠ get a ' prefix so Excel won't run them as formulas (xlsx.py _set_text forces text for the same reason).
@@ -144,46 +250,156 @@
     draw();
   }
 
-  /* Horizontal bar chart. opts: {rows, label: 'key', value: 'key', fmt, max: 15, color} */
+  /* Horizontal bar chart. opts: {rows, label: 'key', value: 'key', fmt, max: 15, color(row)}. Bars grow from their
+   * last width when the values change. */
   function bars(el, opts) {
     el = mount(el);
     const rows = opts.rows.slice().sort((a, b) => (num(b[opts.value]) || 0) - (num(a[opts.value]) || 0)).slice(0, opts.max || 15);
     const top = Math.max(1, ...rows.map((r) => Math.abs(num(r[opts.value]) || 0)));
     const f = opts.fmt || fmt.num;
-    el.replaceChildren(h('div', { class: 'kit-bars', role: 'list' }, rows.map((r) => h('div', { class: 'kit-bar', role: 'listitem' },
-      h('span', { class: 'kit-bar-label', title: r[opts.label] }, fmt.text(r[opts.label])),
-      h('span', { class: 'kit-bar-track' }, h('span', { class: 'kit-bar-fill', style: `width:${(100 * Math.abs(num(r[opts.value]) || 0) / top).toFixed(1)}%;background:${(opts.color && opts.color(r)) || 'var(--brand)'}` })),
-      h('span', { class: 'kit-bar-value' }, f(r[opts.value]))))));
+    const before = el.__kitBars || new Map(), now = new Map(), grow = [];
+    el.replaceChildren(h('div', { class: 'kit-bars', role: 'list' }, rows.map((r, i) => {
+      const key = String(r[opts.label]), pct = (100 * Math.abs(num(r[opts.value]) || 0) / top);
+      const start = still() ? pct : before.has(key) ? before.get(key) : 0;
+      const colour = opts.color && opts.color(r);
+      const fill = h('span', { class: 'kit-bar-fill' + (colour ? '' : ' kit-bar-brand'), style: `width:${start.toFixed(1)}%;${colour ? 'background:' + colour : ''};transition-delay:${Math.min(i, 12) * 30}ms` });
+      now.set(key, pct);
+      if (start !== pct) grow.push([fill, pct]);
+      return h('div', { class: 'kit-bar', role: 'listitem' },
+        h('span', { class: 'kit-bar-label', title: r[opts.label] }, fmt.text(r[opts.label])),
+        h('span', { class: 'kit-bar-track' }, fill),
+        h('span', { class: 'kit-bar-value' }, f(r[opts.value])));
+    })));
+    el.__kitBars = now;
+    if (grow.length) requestAnimationFrame(() => requestAnimationFrame(() => { for (const [fill, pct] of grow) fill.style.width = pct.toFixed(1) + '%'; }));
   }
 
-  /* Line chart over time (d3). opts: {rows, x: 'key' (ISO date or yyyy-MM), series: [{key, label}], fmt, height: 240} */
+  /* Line chart (d3). opts: {rows, x: 'key', series: [{key, label, color, dash: true}], fmt, height: 240, label,
+   *   xType: 'time' (ISO date or yyyy-MM, the default) | 'number', xFmt(v) for number axes,
+   *   area: true (shade under the lines; the default for one series),
+   *   band: {low: 'key', high: 'key', label} (a shaded range, e.g. a typical day),
+   *   marks: [{x, label, note}] (labelled events on the x axis),
+   *   spans: [{from, to, label}] (shaded stretches of the x axis, e.g. a closure),
+   *   tip(row) -> extra tooltip lines (text)}.
+   * Hover shows every series' value at the nearest x. Lines draw in when the data changes. */
+  let uid = 0;
   function line(el, opts) {
     el = mount(el);
-    const W = Math.max(320, el.clientWidth || 640), H = opts.height || 240, m = { t: 12, r: 12, b: 28, l: 52 };
-    const monthly = opts.rows.every((r) => String(r[opts.x]).length === 7);
-    const parse = (v) => new Date((String(v).length === 7 ? v + '-01' : String(v).slice(0, 10)) + 'T00:00:00');  // local midnight, as d3's ticks
-    const xs = opts.rows.map((r) => parse(r[opts.x]));
-    const all = opts.series.flatMap((s) => opts.rows.map((r) => num(r[s.key]) || 0));
-    const x = d3.scaleTime().domain(d3.extent(xs)).range([m.l, W - m.r]);
+    const W = Math.max(320, el.clientWidth || 640), H = opts.height || 240;
+    const marks = opts.marks || [];
+    const m = { t: marks.length ? 30 : 12, r: 24, b: 28, l: 52 };  // room for the last date label
+    const numeric = opts.xType === 'number';
+    const monthly = !numeric && opts.rows.every((r) => String(r[opts.x]).length === 7);
+    // Local time, as d3's ticks: 'yyyy-MM' and 'yyyy-MM-dd' at midnight, 'yyyy-MM-dd HH:mm' at that hour.
+    const hourly = !numeric && opts.rows.some((r) => String(r[opts.x]).length > 10);
+    const parse = numeric ? (v) => num(v) : (v) => {
+      const s = String(v);
+      return s.length > 10 ? new Date(s.slice(0, 16).replace(' ', 'T') + ':00') : new Date((s.length === 7 ? s + '-01' : s.slice(0, 10)) + 'T00:00:00');
+    };
+    const rows = opts.rows.slice().sort((a, b) => parse(a[opts.x]) - parse(b[opts.x]));
+    const xs = rows.map((r) => parse(r[opts.x]));
+    const band = opts.band;
+    const all = opts.series.flatMap((s) => rows.map((r) => num(r[s.key]) || 0))
+      .concat(band ? rows.flatMap((r) => [num(r[band.low]), num(r[band.high])]).filter((v) => v !== null) : []);
+    const x = (numeric ? d3.scaleLinear() : d3.scaleTime()).domain(d3.extent(xs)).range([m.l, W - m.r]);
     const y = d3.scaleLinear().domain([Math.min(0, d3.min(all) || 0), d3.max(all) || 1]).nice().range([H - m.b, m.t]);
+    const yf = opts.fmt || fmt.compact;
+    const colourOf = (s, i) => s.color || dash.colors[i % dash.colors.length];
     const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('class', 'kit-chart').attr('role', 'img').attr('aria-label', opts.label || 'Line chart');
-    // One date label per ~64px, written in the portal's locale, so the labels never run together.
-    // Space labels by the months covered, not the row count: a series with missing months spans more than its rows.
-    const months = monthly ? d3.timeMonth.count(...d3.extent(xs)) + 1 : xs.length;
-    const ticks = Math.max(2, Math.min(months, Math.floor((W - m.l - m.r) / 64)));
-    const tickFmt = (d) => d.toLocaleDateString(LOCALE, monthly ? { month: 'short', year: '2-digit' } : { day: 'numeric', month: 'short' });
-    const days = Math.max(1, Math.ceil((x.domain()[1] - x.domain()[0]) / 864e5 / ticks));  // days between labels
-    const every = monthly ? d3.timeMonth.every(Math.max(1, Math.ceil(months / ticks)))
-      : days <= 1 ? d3.timeDay : days <= 2 ? d3.timeDay.every(2) : days <= 8 ? d3.timeMonday
-        : days <= 20 ? d3.timeMonday.every(2) : d3.timeMonth.every(Math.ceil(days / 30));
-    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(every).tickFormat(tickFmt).tickSizeOuter(0));
-    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((v) => (opts.fmt || fmt.compact)(v)).tickSize(-(W - m.l - m.r))).call((g) => g.select('.domain').remove());
+    const xFmt = numeric ? (opts.xFmt || ((v) => fmt.num(v))) : (d) => d.toLocaleDateString(LOCALE, monthly ? { month: 'short', year: '2-digit' } : { day: 'numeric', month: 'short' });
+    if (numeric) {
+      svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor((W - m.l - m.r) / 64))).tickFormat(xFmt).tickSizeOuter(0));
+    } else {
+      // One date label per ~64px, written in the portal's locale, so the labels never run together.
+      // Space labels by the months covered, not the row count: a series with missing months spans more than its rows.
+      const months = monthly ? d3.timeMonth.count(...d3.extent(xs)) + 1 : xs.length;
+      const ticks = Math.max(2, Math.min(months, Math.floor((W - m.l - m.r) / 64)));
+      const days = Math.max(1, Math.ceil((x.domain()[1] - x.domain()[0]) / 864e5 / ticks));  // days between labels
+      const every = monthly ? d3.timeMonth.every(Math.max(1, Math.ceil(months / ticks)))
+        : days <= 1 ? d3.timeDay : days <= 2 ? d3.timeDay.every(2) : days <= 8 ? d3.timeMonday
+          : days <= 20 ? d3.timeMonday.every(2) : d3.timeMonth.every(Math.ceil(days / 30));
+      svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(every).tickFormat(xFmt).tickSizeOuter(0));
+    }
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((v) => yf(v)).tickSize(-(W - m.l - m.r))).call((g) => g.select('.domain').remove());
+    const px = (r) => x(parse(r[opts.x]));
+    if (band) {
+      const ok = rows.filter((r) => num(r[band.low]) !== null && num(r[band.high]) !== null);
+      svg.append('path').attr('class', 'kit-band').attr('d', d3.area().x(px).y0((r) => y(num(r[band.low]))).y1((r) => y(num(r[band.high]))).curve(d3.curveMonotoneX)(ok));
+    }
+    for (const sp of opts.spans || []) {
+      const a = Math.max(m.l, x(parse(sp.from))), b = Math.min(W - m.r, x(parse(sp.to)));
+      if (!(b > a)) continue;
+      const g = svg.append('g').attr('class', 'kit-span');
+      g.append('rect').attr('x', a).attr('width', b - a).attr('y', m.t).attr('height', H - m.t - m.b);
+      if (sp.label) g.append('text').attr('x', (a + b) / 2).attr('y', m.t + 13).attr('text-anchor', 'middle').text(sp.label);
+    }
+    for (const mk of marks) {
+      const at = x(parse(mk.x));
+      if (!(at >= m.l && at <= W - m.r)) continue;
+      const g = svg.append('g').attr('class', 'kit-mark');
+      g.append('line').attr('x1', at).attr('x2', at).attr('y1', m.t - 6).attr('y2', H - m.b);
+      const text = g.append('text').attr('x', at).attr('y', 12).attr('text-anchor', at > W - 90 ? 'end' : at < m.l + 60 ? 'start' : 'middle').text(mk.label);
+      if (mk.note) g.append('title').text(mk.note);
+      text.attr('class', 'kit-mark-label');
+    }
+    const shade = opts.area ?? opts.series.length === 1;
+    const lines = [];
     opts.series.forEach((s, i) => {
-      svg.append('path').attr('fill', 'none').attr('stroke', s.color || dash.colors[i % dash.colors.length]).attr('stroke-width', 2)
-        .attr('d', d3.line().x((r) => x(parse(r[opts.x]))).y((r) => y(num(r[s.key]) || 0))(opts.rows));
+      const c = colourOf(s, i);
+      const ok = rows.filter((r) => num(r[s.key]) !== null);
+      if (shade && !s.dash) {
+        const id = `kit-grad-${++uid}`;
+        const grad = svg.append('defs').append('linearGradient').attr('id', id).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
+        grad.append('stop').attr('offset', '0%').attr('stop-color', c).attr('stop-opacity', 0.32);
+        grad.append('stop').attr('offset', '100%').attr('stop-color', c).attr('stop-opacity', 0);
+        svg.append('path').attr('class', 'kit-area').attr('fill', `url(#${id})`)
+          .attr('d', d3.area().x(px).y0(y(Math.max(0, y.domain()[0]))).y1((r) => y(num(r[s.key]))).curve(d3.curveMonotoneX)(ok));
+      }
+      lines.push(svg.append('path').attr('class', 'kit-line' + (s.dash ? ' kit-line-dash' : '')).attr('fill', 'none').attr('stroke', c).attr('stroke-width', s.dash ? 1.5 : 2.25)
+        .attr('d', d3.line().x(px).y((r) => y(num(r[s.key]))).curve(d3.curveMonotoneX)(ok)).node());
     });
-    const legend = h('div', { class: 'kit-legend' }, opts.series.map((s, i) => h('span', null, h('i', { style: `background:${s.color || dash.colors[i % dash.colors.length]}` }), s.label || s.key)));
-    el.replaceChildren(svg.node(), opts.series.length > 1 ? legend : '');
+    // Hover: a guide line and a dot per series at the nearest x, with the values in a tooltip.
+    const guide = svg.append('line').attr('class', 'kit-guide').attr('y1', m.t).attr('y2', H - m.b).style('display', 'none');
+    const dots = opts.series.map((s, i) => svg.append('circle').attr('r', 4).attr('class', 'kit-dot').attr('fill', colourOf(s, i)).style('display', 'none'));
+    const legend = h('div', { class: 'kit-legend' }, opts.series.map((s, i) => h('span', null, h('i', { class: s.dash ? 'kit-legend-dash' : null, style: `background:${colourOf(s, i)}` }), s.label || s.key)),
+      band && band.label ? h('span', null, h('i', { class: 'kit-legend-band' }), band.label) : null);
+    el.replaceChildren(svg.node(), opts.series.length > 1 || band ? legend : '');
+    const t = tip(el);
+    const bis = d3.bisector((d) => d).center;
+    svg.append('rect').attr('class', 'kit-hit').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b)
+      .on('pointermove', (ev) => {
+        if (!rows.length) return;
+        const [mx] = d3.pointer(ev);
+        const i = bis(xs, x.invert(mx)), r = rows[i], at = x(xs[i]);
+        guide.attr('x1', at).attr('x2', at).style('display', null);
+        opts.series.forEach((s, k) => { const v = num(r[s.key]); dots[k].attr('cx', at).attr('cy', v === null ? -99 : y(v)).style('display', v === null ? 'none' : null); });
+        const scale = (el.querySelector('svg').getBoundingClientRect().width || W) / W;
+        const head = numeric ? xFmt(xs[i]) : monthly ? fmt.month(r[opts.x])
+          : hourly ? xs[i].toLocaleString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+            : xs[i].toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        t.show(at * scale, (d3.min(opts.series, (s) => y(num(r[s.key]) ?? y.domain()[1])) || m.t) * scale,
+          h('strong', null, head),
+          opts.series.map((s, k) => h('div', { class: 'kit-tip-row' }, h('i', { style: `background:${colourOf(s, k)}` }), h('span', null, s.label || s.key), h('b', null, yf(r[s.key])))),
+          band && band.label && num(r[band.low]) !== null ? h('div', { class: 'kit-tip-row kit-tip-muted' }, h('i', { class: 'kit-legend-band' }), h('span', null, band.label), h('b', null, `${yf(r[band.low])}–${yf(r[band.high])}`)) : null,
+          (opts.tip ? [].concat(opts.tip(r) || []) : []).map((line) => h('div', { class: 'kit-tip-note' }, line)));
+      })
+      .on('pointerleave', () => { guide.style('display', 'none'); dots.forEach((d) => d.style('display', 'none')); t.hide(); });
+    // Draw in, once per new set of values: a resize redraws without it.
+    const sig = rows.length + '|' + opts.series.map((s) => d3.sum(rows, (r) => num(r[s.key]) || 0)).join(',') + '|' + xs[0] + '|' + xs[xs.length - 1];
+    if (el.__kitLineSig !== sig && !still()) {
+      for (const p of lines) {
+        const len = p.getTotalLength ? p.getTotalLength() : 0;
+        if (!len || p.classList.contains('kit-line-dash')) continue;
+        p.style.strokeDasharray = `${len} ${len}`;
+        p.style.strokeDashoffset = String(len);
+        p.getBoundingClientRect();
+        p.style.transition = 'stroke-dashoffset 1.1s cubic-bezier(.2,.7,.2,1)';
+        p.style.strokeDashoffset = '0';
+        p.addEventListener('transitionend', () => { p.style.strokeDasharray = ''; p.style.transition = ''; }, { once: true });
+      }
+      el.querySelectorAll('.kit-area, .kit-band').forEach((a) => a.classList.add('kit-fade'));
+    }
+    el.__kitLineSig = sig;
   }
 
   /* n distinct colours for categories (routes, vehicles, …). Stable for a given index. */
@@ -259,6 +475,6 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  window.kit = { num, fmt, h, ready, filters, tiles, table, csv, csvText, xlsx, bars, line, map, colour, isoDate, daysAgo };
+  window.kit = { num, fmt, h, ready, filters, tiles, table, csv, csvText, xlsx, bars, line, map, colour, isoDate, daysAgo, tip, insight, spark, numberIn };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.kit;  // lets Node tests require this file
 })();

@@ -11,7 +11,7 @@ filters and column masks; opt-in shared caching checks reader access and require
 permitted viewer. Every page shows how fresh its data is, and a dashboard can add an "Ask Genie" bar that answers
 questions with the viewer's own access.
 
-![City Trips in the running app's dark theme: KPI tiles, trips per day and a day-by-hour heatmap](docs/images/city-trips.jpg)
+![City Trips in the running app's dark theme: a headline on the January 2016 blizzard, KPI tiles with trends, and trips per day against a normal day](docs/images/city-trips.jpg)
 
 ## From Power BI to LakeBoard
 
@@ -43,8 +43,7 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
 
 | Sample | Reads | Shows |
 |---|---|---|
-| [City Trips](src/dashboards/city-trips/) | `samples.nyctaxi` | Taxi trips by day and hour, busy ZIP codes, fares by distance |
-| [Sales & Margin](src/dashboards/sales-margin/) | `samples.tpch` | Revenue, discount and margin, year on year |
+| [City Trips](src/dashboards/city-trips/) | `samples.nyctaxi` | The flagship: the January 2016 blizzard, rush-hour speed, where trips go, airport runs |
 | [Bakery Franchises](src/dashboards/bakery-franchises/) | `samples.bakehouse` | Franchise sales, products and reviews, on a map |
 | [Travel Operations](src/dashboards/travel-operations/) | `samples.wanderbricks` | Executive overview, saved destinations, property drill-down, guest experience and TV view |
 | [Travel Marketplace](src/dashboards/travel-marketplace/) | `samples.wanderbricks` | Bookings, revenue and seasonality across 42 destinations, drilling down to each property on a map |
@@ -53,13 +52,14 @@ works well: it has a serverless starter warehouse, Databricks Apps and the `samp
 | [World Weather](src/dashboards/world-weather/) | `samples.accuweather` | Observed weather and a 15-day forecast for 50 cities, on a temperature map |
 
 <p>
-  <img src="docs/images/sales-margin.jpg" width="49%" alt="Sales &amp; Margin in dark mode: revenue, discount and margin KPIs against the year before, and a monthly trend">
   <img src="docs/images/bakery-franchises.jpg" width="49%" alt="Bakery Franchises in dark mode: sales KPIs and a world map of franchises sized by revenue">
+  <img src="docs/images/travel-marketplace.jpg" width="49%" alt="Travel Marketplace in dark mode: booking KPIs, a world map of destinations sized by revenue and the top destinations">
 </p>
 <p>
-  <img src="docs/images/travel-marketplace.jpg" width="49%" alt="Travel Marketplace in dark mode: booking KPIs, a world map of destinations sized by revenue and the top destinations">
   <img src="docs/images/guest-experience.jpg" width="49%" alt="Guest Experience in dark mode: review and support-chat KPIs, reviews per month and the star distribution">
   <img src="docs/images/omnichannel-retail.jpg" width="49%" alt="Omnichannel Retail in dark mode: sales KPIs against the year before, monthly sales by channel and the channel mix">
+</p>
+<p>
   <img src="docs/images/world-weather.jpg" width="49%" alt="World Weather in dark mode: a temperature map of 50 cities and a day-by-day chart of observed and forecast weather for Sydney">
 </p>
 
@@ -211,7 +211,7 @@ never changes, so the panel explains why refreshing would return the same data.
 The same City Trips dashboard at a 390 × 844 browser viewport: the navigation collapses into a drawer,
 KPI tiles wrap into two columns, and charts stack below the filters.
 
-<img src="docs/images/city-trips-mobile.jpg" width="320" alt="City Trips at phone width with collapsed navigation, date filters, two-column KPI tiles and a full-width trips-per-day chart">
+<img src="docs/images/city-trips-mobile.jpg" width="320" alt="City Trips at phone width: date filters and presets, the blizzard headline and two-column KPI tiles with trends">
 
 This is a phone-width browser preview. Databricks also documents access to Databricks Apps through the
 [Genie mobile app](https://docs.databricks.com/aws/en/genie-one/mobile); testing LakeBoard inside that native
